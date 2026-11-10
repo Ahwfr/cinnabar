@@ -84,11 +84,47 @@ fn portal_resources_preserve_outward_faces_under_a_mirrored_transform() {
         always: false,
         additive: false,
         mirrored: true,
+        translucent: false,
     };
     for mut descriptor in pipeline::layouts::descriptors::build(false) {
         let original = descriptor.primitive.front_face;
         Specialization.specialize(key, &mut descriptor).unwrap();
         assert_ne!(descriptor.primitive.front_face, original);
+    }
+}
+
+#[test]
+fn block_opacity_blends_without_writing_world_depth() {
+    let (mut store, _, _, mut instance) = grid_scene();
+    instance.tint[3] = 0.65;
+    assert!(
+        store
+            .create(instance.clone(), DrawingPermissions::ALL)
+            .is_ok()
+    );
+    instance.tint[3] = 1.1;
+    assert!(store.create(instance, DrawingPermissions::ALL).is_err());
+    let key = Key {
+        msaa: Msaa::Off,
+        hdr: false,
+        clipped: false,
+        always: false,
+        additive: false,
+        mirrored: false,
+        translucent: true,
+    };
+    for mut descriptor in pipeline::layouts::descriptors::build(false) {
+        Specialization.specialize(key, &mut descriptor).unwrap();
+        let depth = descriptor.depth_stencil.unwrap();
+        assert_eq!(depth.depth_write_enabled, Some(false));
+        assert_eq!(depth.depth_compare, Some(CompareFunction::GreaterEqual));
+        assert!(
+            descriptor.fragment.unwrap().targets[0]
+                .as_ref()
+                .unwrap()
+                .blend
+                .is_some()
+        );
     }
 }
 

@@ -51,7 +51,8 @@ pub(super) fn queue(
                     let geometry = resources.geometry.get(&instance.geometry)?;
                     (Arc::ptr_eq(geometry, &placement.native.geometry)
                         && instance.clip.is_none()
-                        && instance.depth != Depth::Always)
+                        && instance.depth != Depth::Always
+                        && instance.tint[3] == 1.)
                         .then_some(instance)
                 })
             else {
@@ -126,6 +127,7 @@ impl RenderCommand<Transparent3d> for DrawSection {
         };
         if !placement.active
             || placement.clip.is_some()
+            || placement.overlay()
             || !Arc::ptr_eq(&draw.geometry, &placement.native.geometry)
         {
             return RenderCommandResult::Skip;

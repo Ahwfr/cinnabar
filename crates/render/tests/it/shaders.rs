@@ -227,6 +227,25 @@ fn dragon_dissolve_passes_preserve_identical_vertex_depths() {
 }
 
 #[test]
+fn retained_block_opacity_shader_validates_with_its_uniform() {
+    let raw = include_str!("../../src/transparent_terrain.wesl");
+    let source = shader_source::composed(raw, &["MOD_BLOCKS", "MOD_BLOCK_OPACITY"]);
+    let module = naga::front::wgsl::parse_str(&source).expect("retained block shader parses");
+    naga::valid::Validator::new(
+        naga::valid::ValidationFlags::all(),
+        naga::valid::Capabilities::all(),
+    )
+    .validate(&module)
+    .expect("retained block shader validates");
+    assert!(module.global_variables.iter().any(|(_, variable)| {
+        variable
+            .binding
+            .as_ref()
+            .is_some_and(|binding| binding.group == 2 && binding.binding == 0)
+    }));
+}
+
+#[test]
 fn every_shader_parses_and_validates() {
     let mut failures = Vec::new();
     let mut validated = 0;

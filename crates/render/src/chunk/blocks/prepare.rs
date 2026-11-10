@@ -1,6 +1,5 @@
 //! Admits native arenas on workers and refreshes only changed placement inputs.
 use super::*;
-use bevy::render::render_resource::UniformBuffer;
 use gpu::bind_groups::{ChunkGpuAnimationClock, ChunkGpuBiomeTints, ChunkGpuTextureAssets};
 
 /// Serializes one camera in grid space so unchanged native shaders can draw arbitrary transforms.
@@ -294,6 +293,7 @@ pub(super) fn prepare(
                     always: instance.depth == Depth::Always,
                     additive: instance.blend == Blend::Additive,
                     mirrored: determinant < 0.,
+                    translucent: instance.tint[3] < 1.,
                 };
                 let ids: Option<Vec<_>> = pipelines
                     .variants
@@ -312,7 +312,8 @@ pub(super) fn prepare(
                     retired_placements.push(old);
                 }
                 if let std::collections::btree_map::Entry::Vacant(entry) = placements.entry(key) {
-                    let Some(charge) = ledger.allocate(ViewUniform::min_size().get(), || Some(()))
+                    let Some(charge) =
+                        ledger.allocate(ViewUniform::min_size().get() + 16, || Some(()))
                     else {
                         fail(&native.geometry, "block view memory");
                         continue;
@@ -335,6 +336,8 @@ pub(super) fn prepare(
                         pipelines: ids.clone().try_into().unwrap(),
                         clip: instance.clip,
                         always: instance.depth == Depth::Always,
+                        opacity: 1.,
+                        opacity_binding: None,
                         active: true,
                         _charge: charge,
                     });
@@ -344,6 +347,29 @@ pub(super) fn prepare(
                 placement.clip = instance.clip;
                 placement.always = instance.depth == Depth::Always;
                 placement.active = true;
+                let opacity = instance.tint[3];
+                if placement.opacity != opacity {
+                    if opacity < 1. {
+                        let value = bevy::math::Vec4::splat(opacity);
+                        if let Some((uniform, _)) = &mut placement.opacity_binding {
+                            uniform.set(value);
+                            uniform.write_buffer(&device, &queue);
+                        } else {
+                            let mut uniform = UniformBuffer::from(value);
+                            uniform.write_buffer(&device, &queue);
+                            let binding = device.create_bind_group(
+                                "retained block opacity",
+                                &cache.get_bind_group_layout(&opacity_layout()),
+                                &[BindGroupEntry {
+                                    binding: 0,
+                                    resource: uniform.binding().unwrap(),
+                                }],
+                            );
+                            placement.opacity_binding = Some((uniform, binding));
+                        }
+                    }
+                    placement.opacity = opacity;
+                }
                 if placement.matrix != matrix
                     || placement.projection != view.clip_from_view
                     || placement.viewport != view.viewport

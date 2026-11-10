@@ -61,7 +61,8 @@ interface drawing {
     enum join { bevel, miter, round }
     /// The host-expanded shape at each open polyline endpoint.
     enum cap { butt, round }
-    /// One retained placement. Block grids use host materials and require white tint; handles belong to the same owner.
+    /// One retained placement. Block grids use host materials and white RGB. Alpha below 1
+    /// requests opacity with normal blending and does not write depth. Handles share one owner.
     record instance {
         geometry: handle, material: option<handle>, clip: option<handle>, params: list<f32>, anchor: anchor, transform: transform,
         tint: tuple<f32, f32, f32, f32>, depth: depth, blend: blend,

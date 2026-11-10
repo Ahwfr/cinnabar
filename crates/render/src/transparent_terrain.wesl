@@ -8,6 +8,16 @@ import render::chunk_bindings::{TRANSPARENT_WATER_DRAW_FLAG, transparent_refs};
 import render::liquid::{VertexOutput as LiquidOutput, liquid_record, vertex_for_record, shade_liquid};
 import render::model::{VertexOutput as ModelOutput, model_vertex, shade_blend};
 
+@if(MOD_BLOCK_OPACITY)
+@group(2) @binding(0) var<uniform> block_opacity: vec4<f32>;
+
+fn apply_block_opacity(colour: vec4<f32>) -> vec4<f32> {
+    @if(MOD_BLOCK_OPACITY)
+    return vec4(colour.rgb, colour.a * block_opacity.x);
+    @if(!MOD_BLOCK_OPACITY)
+    return colour;
+}
+
 struct VertexOutput {
     // Invariant like both families' outputs, so shared edges keep identical positions.
     @builtin(position) @invariant clip_position: vec4<f32>,
@@ -191,7 +201,7 @@ fn fragment(in: VertexOutput, @builtin(front_facing) front_facing: bool) -> @loc
     let model_dy = dpdy(in.model_uv);
     if (in.routing.x != 0u) {
         // Packed liquid corners wind clockwise; this pipeline's front face is counter-clockwise.
-        return shade_liquid(liquid_output(in), !front_facing, liquid_dx, liquid_dy);
+        return apply_block_opacity(shade_liquid(liquid_output(in), !front_facing, liquid_dx, liquid_dy));
     }
-    return shade_blend(model_output(in), front_facing, model_dx, model_dy);
+    return apply_block_opacity(shade_blend(model_output(in), front_facing, model_dx, model_dy));
 }

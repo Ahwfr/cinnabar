@@ -1,7 +1,7 @@
 //! Independent terrain arenas for retained block grids, built without frame-thread meshing.
 
 use crate::chunk::*;
-use bevy::render::render_resource::{CachedRenderPipelineId, FrontFace};
+use bevy::render::render_resource::{BufferSize, CachedRenderPipelineId, FrontFace, UniformBuffer};
 use bevy::tasks::{AsyncComputeTaskPool, Task, block_on, poll_once};
 use gpu::resource_geometry::PreparedResourceGeometry;
 use mod_api::drawing::DrawingHandle;
@@ -28,6 +28,7 @@ struct Key {
     always: bool,
     additive: bool,
     mirrored: bool,
+    translucent: bool,
 }
 struct Specialization;
 impl Specializer<RenderPipeline> for Specialization {
@@ -60,6 +61,25 @@ impl Specializer<RenderPipeline> for Specialization {
         if key.always {
             depth.depth_compare = Some(CompareFunction::Always);
         }
+        if key.translucent {
+            depth.depth_write_enabled = Some(false);
+            let fragment = descriptor.fragment.as_mut().unwrap();
+            let target = fragment.targets[0].as_mut().unwrap();
+            if target.blend.is_some() {
+                fragment.shader_defs.push("MOD_BLOCK_OPACITY".into());
+                descriptor.layout.push(opacity_layout());
+            } else {
+                target.blend = Some(BlendState {
+                    color: wgpu::BlendComponent {
+                        src_factor: wgpu::BlendFactor::Constant,
+                        dst_factor: wgpu::BlendFactor::OneMinusConstant,
+                        operation: wgpu::BlendOperation::Add,
+                    },
+                    alpha: wgpu::BlendComponent::REPLACE,
+                });
+                target.write_mask = ColorWrites::RED | ColorWrites::GREEN | ColorWrites::BLUE;
+            }
+        }
         if key.additive {
             let target = descriptor.fragment.as_mut().unwrap().targets[0]
                 .as_mut()
@@ -81,6 +101,23 @@ impl Specializer<RenderPipeline> for Specialization {
         }
         Ok(key)
     }
+}
+
+/// Binds opacity independently of the shared terrain camera and material data.
+fn opacity_layout() -> BindGroupLayoutDescriptor {
+    BindGroupLayoutDescriptor::new(
+        "retained block opacity",
+        &[BindGroupLayoutEntry {
+            binding: 0,
+            visibility: ShaderStages::FRAGMENT,
+            ty: BindingType::Buffer {
+                ty: BufferBindingType::Uniform,
+                has_dynamic_offset: false,
+                min_binding_size: BufferSize::new(16),
+            },
+            count: None,
+        }],
+    )
 }
 
 #[derive(Resource)]
@@ -136,8 +173,17 @@ struct Placement {
     pipelines: [CachedRenderPipelineId; 5],
     clip: Option<DrawingHandle>,
     always: bool,
+    opacity: f32,
+    opacity_binding: Option<(UniformBuffer<bevy::math::Vec4>, BindGroup)>,
     active: bool,
     _charge: mod_render::GpuAllocation<()>,
+}
+
+impl Placement {
+    /// Translucent grids draw after opaque terrain while keeping the requested depth test.
+    fn overlay(&self) -> bool {
+        self.always || self.opacity < 1.
+    }
 }
 
 #[derive(Resource, Default)]
@@ -295,6 +341,7 @@ impl crate::pipeline_warmup::PrewarmPipelines for Pipelines {
                             always,
                             additive,
                             mirrored,
+                            translucent: false,
                         };
                         for variants in &mut self.variants {
                             ids.push(variants.specialize(cache, key)?);

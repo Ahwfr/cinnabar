@@ -31,7 +31,7 @@ pub(crate) fn encode<'w>(
             || view != entity
             || !placement.active
             || placement.clip != clip
-            || always.is_some_and(|always| always != placement.always)
+            || always.is_some_and(|always| always != placement.overlay())
         {
             continue;
         }
@@ -52,9 +52,19 @@ pub(crate) fn encode<'w>(
             }
             pass.set_render_pipeline(pipeline);
             pass.set_bind_group(0, binding, &[0]);
+            if placement.opacity < 1. {
+                let Some((_, opacity)) = &placement.opacity_binding else {
+                    continue;
+                };
+                pass.set_bind_group(2, opacity, &[]);
+            }
             pass.set_index_buffer(arena.index_buffer.slice(..), IndexFormat::Uint32);
             pass.draw_indexed(0..STATIC_QUAD_INDICES.len() as u32, 0, 0..order.count);
             continue;
+        }
+        if placement.opacity < 1. {
+            let opacity = placement.opacity;
+            pass.set_blend_constant(bevy::color::LinearRgba::new(opacity, opacity, opacity, 1.));
         }
         pass.set_bind_group(0, opaque, &[0]);
         pass.set_vertex_buffer(0, arena.vertex_offset_buffer.slice(..));
@@ -121,7 +131,7 @@ pub(crate) fn contains(
             view == entity
                 && placement.active
                 && placement.clip == clip
-                && always.is_none_or(|always| always == placement.always)
+                && always.is_none_or(|always| always == placement.overlay())
         })
     })
 }
