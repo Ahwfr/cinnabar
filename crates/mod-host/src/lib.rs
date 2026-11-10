@@ -109,6 +109,8 @@ pub struct GameplayFacts {
     pub attack_held: bool,
     /// Current crosshair block hit, before mod outputs.
     pub block_target: Option<GameplayVector3>,
+    /// Cell adjoining the current crosshair block on its hit face.
+    pub placement_cell: Option<[i32; 3]>,
 }
 
 /// A component's offered destination and expected block state for a Creative use press.

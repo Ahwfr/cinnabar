@@ -21,6 +21,25 @@ impl ItemUsePolicy {
 }
 
 impl cinnabar::extension::item_use::Host for State {
+    fn read_placement_cell(&mut self) -> Result<Result<Option<(i32, i32, i32)>, String>> {
+        self.controls.budget(false)?;
+        if !self.grants.item_use || !self.grants.terrain {
+            return Ok(Err(
+                "Reading the placement cell requires item use and terrain".into(),
+            ));
+        }
+        Ok(Ok(self
+            .gameplay_facts
+            .placement_cell
+            .filter(|_| {
+                self.snapshot.is_some()
+                    && self.controls.frame.focused
+                    && self.controls.frame.gameplay
+                    && !self.controls.frame.panel_open
+            })
+            .map(|[x, y, z]| (x, y, z))))
+    }
+
     fn offer_creative_placement(
         &mut self,
         position: (i32, i32, i32),

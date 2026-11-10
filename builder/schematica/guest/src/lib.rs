@@ -457,10 +457,17 @@ impl Viewer {
                 self.verifier_marker = overlay::highlight(self.world.unwrap().1, cell).ok();
             }
         }
-        if self.options.fast_place
-            && let Some(placement) = self.placement
-            && let Some((block, pos @ [x, y, z])) = self.aimed_block()
-            && self.tiles.iter().any(|tile| tile.is_missing(pos))
+        let placement_cell = if self.options.fast_place && self.shown && self.placement.is_some() {
+            item_use::read_placement_cell()
+                .ok()
+                .flatten()
+                .map(|(x, y, z)| [x, y, z])
+        } else {
+            None
+        };
+        if let Some(placement) = self.placement
+            && let Some(pos @ [x, y, z]) = placement_cell
+            && let Some(block) = self.planned_block(pos)
         {
             let block = placement.transform_state(block);
             if let Err(error) = item_use::offer_creative_placement(
@@ -476,7 +483,7 @@ impl Viewer {
             // A tile owns up to four handles. Stay under the host's 32 drawing
             // calls per callback even when moving or hiding a large guide.
             self.clear_retired();
-            self.publish_label();
+            self.publish_label(placement_cell);
             return;
         }
         if !self.tiles.is_empty() && !self.preview.palette_ready(&self.schematic) {
@@ -505,7 +512,7 @@ impl Viewer {
                 "Schematica | Textures need render_material and at most 128 visible tiles",
             );
         } else {
-            self.publish_label();
+            self.publish_label(placement_cell);
         }
     }
 
@@ -659,11 +666,20 @@ impl Viewer {
         true
     }
 
-    fn aimed_block(&self) -> Option<(&schematica_core::BlockState, [i32; 3])> {
-        let (Some(placement), Some(pose)) = (self.placement, &self.pose) else {
-            return None;
-        };
+    fn planned_block(&self, world: [i32; 3]) -> Option<&schematica_core::BlockState> {
         if !self.shown {
+            return None;
+        }
+        let local = self
+            .placement?
+            .world_to_local(self.schematic.size(), world)?;
+        let block = self.schematic.get(local)?;
+        (self.layers().includes(local[1]) && !block.is_air()).then_some(block)
+    }
+
+    fn aimed_block(&self) -> Option<(&schematica_core::BlockState, [i32; 3])> {
+        let pose = self.pose.as_ref()?;
+        if !self.shown || self.placement.is_none() {
             return None;
         }
         let forward = [
@@ -675,13 +691,7 @@ impl Viewer {
         for step in 0..=80 {
             let world =
                 [0, 1, 2].map(|i| (eye[i] + forward[i] * (step as f32 / 16.)).floor() as i32);
-            let Some(local) = placement.world_to_local(self.schematic.size(), world) else {
-                continue;
-            };
-            if self.layers().includes(local[1])
-                && let Some(block) = self.schematic.get(local)
-                && !block.is_air()
-            {
+            if let Some(block) = self.planned_block(world) {
                 return Some((block, world));
             }
         }
@@ -952,13 +962,13 @@ impl Viewer {
         }
     }
 
-    fn publish_label(&mut self) {
-        if self.options.fast_place
-            && let Some((block, pos)) = self.aimed_block()
+    fn publish_label(&mut self, placement_cell: Option<[i32; 3]>) {
+        if let Some(pos) = placement_cell
+            && let Some(block) = self.planned_block(pos)
             && self.tiles.iter().any(|tile| tile.is_missing(pos))
         {
             let message = format!(
-                "Fast Place | {} at {pos:?} | Aim through the ghost at its support",
+                "Fast Place | {} at {pos:?} | Right-click to place",
                 block.name
             );
             self.show_label(&message);

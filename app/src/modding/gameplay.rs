@@ -395,6 +395,7 @@ impl GameplayContext<'_> {
                 }
             })
         });
+        let block_hit = input_owned.then(|| self.block_hit()).flatten();
         mod_host::GameplayFacts {
             movement_input: self
                 .input
@@ -412,7 +413,14 @@ impl GameplayContext<'_> {
                             sprint: input.phase(semantic_input::Action::Sprint).held,
                         })
                 }),
-            block_target: input_owned.then(|| self.block_target()).flatten(),
+            block_target: block_hit.as_ref().map(|hit| GameplayVector3 {
+                x: hit.block_pos[0] as f32 + 0.5,
+                y: hit.block_pos[1] as f32 + 0.5,
+                z: hit.block_pos[2] as f32 + 0.5,
+            }),
+            placement_cell: block_hit
+                .filter(|hit| hit.face <= 5)
+                .map(|hit| gameplay::block_use::placement_cell(hit.block_pos, hit.face)),
             attack_held: input_owned
                 && self
                     .input
@@ -438,7 +446,7 @@ impl GameplayContext<'_> {
     }
 
     /// Observes the current crosshair without applying any component mining request.
-    fn block_target(&self) -> Option<GameplayVector3> {
+    fn block_hit(&self) -> Option<sim::BlockHit> {
         let stream = self.world.as_ref()?.stream.as_ref()?;
         let player = self.player.as_ref()?;
         let origin = self.origin.as_ref()?.outbound_ray()?;
@@ -495,11 +503,7 @@ impl GameplayContext<'_> {
         ) {
             return None;
         }
-        Some(GameplayVector3 {
-            x: hit.block_pos[0] as f32 + 0.5,
-            y: hit.block_pos[1] as f32 + 0.5,
-            z: hit.block_pos[2] as f32 + 0.5,
-        })
+        Some(hit)
     }
 
     /// Called only for a successfully committed, once-consumed current-frame delta.

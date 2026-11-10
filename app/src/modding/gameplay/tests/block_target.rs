@@ -2,6 +2,25 @@ use super::*;
 use world::{NbtCompound, NbtValue};
 
 #[test]
+fn placement_cell_is_on_the_hit_face_and_requires_input_ownership() {
+    let (mut world, _captured) = crate::block_use::published_tests::fixture();
+    bind_world_clock(&mut world);
+    let cells = world
+        .run_system_cached(|context: GameplayContext| {
+            [true, false].map(|owned| context.facts(owned, None, None, None).placement_cell)
+        })
+        .unwrap();
+    assert_eq!(cells, [Some([4, 2, 7]), None]);
+}
+
+fn bind_world_clock(world: &mut World) {
+    let mut clock = client_presentation::environment::WorldClock::default();
+    let mut weather = client_presentation::environment::WeatherState::default();
+    client_presentation::environment::bind_session_generation(&mut clock, &mut weather, 7);
+    world.insert_resource(clock);
+}
+
+#[test]
 fn block_target_reads_selectable_cell_overlays() {
     let (mut world, _captured) = crate::block_use::published_tests::fixture();
     let state = |name: &str| {
@@ -51,12 +70,11 @@ fn block_target_reads_selectable_cell_overlays() {
             stream.committed_sequence() >= sequence + 2
         });
     }
-    let mut clock = client_presentation::environment::WorldClock::default();
-    let mut weather = client_presentation::environment::WeatherState::default();
-    client_presentation::environment::bind_session_generation(&mut clock, &mut weather, 7);
-    world.insert_resource(clock);
+    bind_world_clock(&mut world);
     let point = world
-        .run_system_cached(|context: GameplayContext| context.block_target())
+        .run_system_cached(|context: GameplayContext| {
+            context.facts(true, None, None, None).block_target
+        })
         .unwrap();
     assert_eq!(
         point,

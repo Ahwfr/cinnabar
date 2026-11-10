@@ -227,15 +227,18 @@ pub(super) fn resume(
     let Some(policy) = context.creative.as_deref_mut() else {
         return false;
     };
-    policy.claimed &= held;
+    policy.claimed &= held && policy.offer.is_some();
     let Some(mut pending) = policy.pending.take() else {
         return policy.claimed;
     };
+    if policy.offer.as_ref() != Some(&pending.offer) {
+        policy.claimed = false;
+        return false;
+    }
     let Some(stream) = context.client_world.stream.as_ref() else {
         return true;
     };
     if player.facts.player_game_mode() != Some(pending.game_mode)
-        || policy.offer.as_ref() != Some(&pending.offer)
         || pending.scope
             != (
                 stream.authority().actor_session_id(),
