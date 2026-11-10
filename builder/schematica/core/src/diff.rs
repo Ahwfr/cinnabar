@@ -16,6 +16,8 @@ pub enum CellStatus {
     Missing,
     /// Both are solid but differ.
     Wrong,
+    /// Identifier matches but one or more block properties differ.
+    WrongState,
     /// Schematic wants air, world has a block.
     Extra,
     /// World data not loaded.
@@ -38,17 +40,9 @@ pub fn classify(expected: &BlockState, actual: Option<&BlockState>, mode: MatchM
         (true, true) => CellStatus::Correct,
         (true, false) => CellStatus::Extra,
         (false, true) => CellStatus::Missing,
-        (false, false) => {
-            let same = match mode {
-                MatchMode::Exact => expected == actual,
-                MatchMode::IgnoreStates => expected.name == actual.name,
-            };
-            if same {
-                CellStatus::Correct
-            } else {
-                CellStatus::Wrong
-            }
-        }
+        (false, false) if expected.name != actual.name => CellStatus::Wrong,
+        (false, false) if mode == MatchMode::Exact && expected != actual => CellStatus::WrongState,
+        (false, false) => CellStatus::Correct,
     }
 }
 
@@ -91,7 +85,7 @@ impl Tally {
         match s {
             CellStatus::Correct => self.correct += 1,
             CellStatus::Missing => self.missing += 1,
-            CellStatus::Wrong => self.wrong += 1,
+            CellStatus::Wrong | CellStatus::WrongState => self.wrong += 1,
             CellStatus::Extra => self.extra += 1,
             CellStatus::Unloaded => self.unloaded += 1,
         }

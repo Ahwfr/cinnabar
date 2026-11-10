@@ -212,7 +212,7 @@ fn classify_matches_litematica_semantics() {
     let s2 = stairs(1);
     assert_eq!(
         classify(&s1, Some(&s2), MatchMode::Exact),
-        CellStatus::Wrong
+        CellStatus::WrongState
     );
     assert_eq!(
         classify(&s1, Some(&s2), MatchMode::IgnoreStates),

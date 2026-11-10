@@ -4,6 +4,7 @@ wit_bindgen::generate!({
     generate_all,
 });
 
+mod hotkeys;
 mod menu;
 mod overlay;
 
@@ -18,21 +19,24 @@ use std::{cell::RefCell, collections::BTreeMap, f32::consts::TAU};
 
 thread_local! {
     static RUNTIME: RefCell<(Runtime, Vec<&'static [u8]>, Options)> =
-        const { RefCell::new((Runtime::Start, Vec::new(), Options { textured: true, assist: false, fast_place: false })) };
+        const { RefCell::new((Runtime::Start, Vec::new(), Options { textured: true, assist: false, fast_place: false, opacity: 65, hotkeys: BTreeMap::new() })) };
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone)]
 struct Options {
     textured: bool,
     assist: bool,
     fast_place: bool,
+    opacity: u8,
+    hotkeys: BTreeMap<usize, String>,
 }
 
 impl Options {
-    fn save(self) {
+    fn save(&self) {
         let _ = settings::save(
             &serde_json::json!({
                 "textured":self.textured, "assist":self.assist, "fast_place": self.fast_place,
+                "opacity": self.opacity, "hotkeys": self.hotkeys,
             })
             .to_string(),
         );
@@ -59,7 +63,7 @@ struct Schematica;
 impl Guest for Schematica {
     fn init() {
         if let Ok(raw) = settings::load()
-            && raw.len() <= 256
+            && raw.len() <= 1024
             && let Ok(value) = serde_json::from_str::<serde_json::Value>(&raw)
         {
             RUNTIME.with(|state| {
@@ -67,6 +71,16 @@ impl Guest for Schematica {
                 options.textured = value["textured"].as_bool().unwrap_or(options.textured);
                 options.assist = value["assist"].as_bool().unwrap_or(options.assist);
                 options.fast_place = value["fast_place"].as_bool().unwrap_or(options.fast_place);
+                if let Some(opacity) = value["opacity"].as_u64() {
+                    options.opacity = opacity.clamp(25, 90) as u8;
+                }
+                if let Some(bindings) = value["hotkeys"].as_object() {
+                    for (index, value) in bindings {
+                        if let (Ok(index), Some(value)) = (index.parse(), value.as_str()) {
+                            hotkeys::edit(&mut options.hotkeys, index, value);
+                        }
+                    }
+                }
             });
         }
         label("Schematica | Alt+J library | Alt+I controls | Alt+K settings");
@@ -86,7 +100,7 @@ impl Guest for Schematica {
                             Schematic::new("No schematic loaded", [1; 3]),
                             Vec::new(),
                             library_names(catalog),
-                            *options,
+                            options.clone(),
                             false,
                         ));
                     }
@@ -97,7 +111,7 @@ impl Guest for Schematica {
                 Runtime::Ready(viewer) => {
                     if let Some(index) = viewer.request {
                         if viewer.release_for_switch() {
-                            *options = viewer.options;
+                            *options = viewer.options.clone();
                             match blueprint::Decoder::new(catalog[index]) {
                                 Ok(decoder) => *runtime = Runtime::Loading(decoder),
                                 Err(_) => invalidate(runtime),
@@ -191,7 +205,7 @@ impl Guest for Schematica {
                         schematic,
                         materials,
                         library_names(catalog),
-                        *options,
+                        options.clone(),
                         true,
                     ));
                     label("Schematica | Alt+J library | Alt+I controls | Alt+K settings");
@@ -238,8 +252,12 @@ struct Viewer {
     layer: i32,
     layer_mode: u8,
     shown: bool,
+    render_all: bool,
+    locked: bool,
+    menu_armed: bool,
     options: Options,
     material_page: usize,
+    verifier_page: usize,
     screen: Screen,
     library: Vec<String>,
     selected: Option<usize>,
@@ -274,8 +292,12 @@ impl Viewer {
             layer: 0,
             layer_mode: 0,
             shown: true,
+            render_all: true,
+            locked: false,
+            menu_armed: false,
             options,
             material_page: 0,
+            verifier_page: 0,
             screen: Screen::Control,
             library,
             selected: None,
@@ -303,6 +325,7 @@ impl Viewer {
                 self.tiles.clear();
                 self.retired.clear();
                 self.placement = None;
+                self.locked = false;
                 self.world = Some(scope);
                 self.last_label.clear();
             }
@@ -314,13 +337,14 @@ impl Viewer {
             return;
         };
         if !keys.focused {
+            self.menu_armed = false;
             return;
         }
         let alt = keys
             .keys_held
             .iter()
             .any(|key| key == "AltLeft" || key == "AltRight");
-        let shortcut = alt
+        let legacy = alt
             .then(|| {
                 keys.keys_pressed.iter().find_map(|key| match key.as_str() {
                     "KeyJ" => Some(Screen::Load),
@@ -332,11 +356,23 @@ impl Viewer {
             })
             .flatten();
         if keys.panel_open {
+            self.menu_armed = false;
             let old = self.screen;
             let mut changed = false;
             if self.screen == Screen::Control {
                 for edit in input::read_text_events().unwrap_or_default() {
                     changed |= self.edit_number(&edit.id, &edit.value);
+                }
+            }
+            if self.screen == Screen::Hotkeys {
+                for edit in input::read_text_events().unwrap_or_default() {
+                    if let Some(index) =
+                        edit.id.strip_prefix("bind-").and_then(|id| id.parse().ok())
+                    {
+                        hotkeys::edit(&mut self.options.hotkeys, index, &edit.value);
+                        self.options.save();
+                        changed = true;
+                    }
                 }
             }
             for event in keys.events {
@@ -351,11 +387,14 @@ impl Viewer {
             return;
         }
         if !active_world || !keys.gameplay {
+            self.menu_armed = false;
             return;
         }
-        if let Some(screen) = shortcut {
+        if let Some(screen) = legacy.or_else(|| self.builder_hotkey(&keys, alt)) {
             self.screen = screen;
             self.selected = None;
+            self.verifier_page = 0;
+            self.material_page = 0;
             menu::open(self, false);
             return;
         }
@@ -393,11 +432,14 @@ impl Viewer {
             && self.tiles.iter().any(|tile| tile.is_missing(pos))
         {
             let block = placement.transform_state(block);
-            let _ = item_use::offer_creative_placement(
+            if let Err(error) = item_use::offer_creative_placement(
                 (x, y, z),
                 &block.name,
                 &overlay::canonical(&block),
-            );
+            ) {
+                self.show_label(&format!("Fast Place | {error}"));
+                return;
+            }
         }
         if !self.retired.is_empty() {
             // A tile owns up to four handles. Stay under the host's 32 drawing
@@ -422,7 +464,7 @@ impl Viewer {
                 &self.preview,
                 &self.schematic,
                 self.world.unwrap().1,
-                textured,
+                textured.then_some(f32::from(self.options.opacity) / 100.),
             ) {
                 self.cursor = (self.cursor + 1) % self.tiles.len();
             }
@@ -436,10 +478,47 @@ impl Viewer {
         }
     }
 
+    /// Resolve chords before opening the main menu on release of a standalone M.
+    fn builder_hotkey(&mut self, keys: &input::Controls, alt: bool) -> Option<Screen> {
+        let modified = alt
+            || ["Control", "Shift", "Super"]
+                .iter()
+                .any(|modifier| keys.keys_held.iter().any(|key| key.starts_with(modifier)));
+        if modified {
+            self.menu_armed = false;
+            return None;
+        }
+        use hotkeys::Action;
+        match hotkeys::pressed(&self.options.hotkeys, keys, &mut self.menu_armed)? {
+            Action::Main => return Some(Screen::Main),
+            Action::Config => return Some(Screen::Settings),
+            Action::Placement | Action::PlacementConfig => return Some(Screen::Control),
+            Action::Verifier => return Some(Screen::Verifier),
+            Action::Materials => return Some(Screen::Materials),
+            Action::Render => {
+                self.render_all = !self.render_all;
+                self.dirty = true;
+                self.last_label.clear();
+                if !self.render_all {
+                    label("");
+                }
+            }
+            Action::Ghosts => self.dirty |= self.control("KeyB"),
+            Action::NextMode => self.dirty |= self.control("KeyL"),
+            Action::PreviousMode => {
+                self.layer_mode = (self.layer_mode + 2) % 3;
+                self.dirty = true;
+            }
+            Action::NextLayer => self.dirty |= self.control("BracketRight"),
+            Action::PreviousLayer => self.dirty |= self.control("BracketLeft"),
+        }
+        None
+    }
+
     fn control(&mut self, key: &str) -> bool {
         match key {
             "KeyP" => {
-                if !self.loaded {
+                if !self.loaded || self.locked {
                     return false;
                 }
                 let Some(frame) = &self.pose else {
@@ -480,6 +559,9 @@ impl Viewer {
                 }
             }
             _ => {
+                if self.locked {
+                    return false;
+                }
                 let Some(p) = &mut self.placement else {
                     return false;
                 };
@@ -507,7 +589,7 @@ impl Viewer {
     }
 
     fn move_here(&mut self) -> bool {
-        if !self.loaded {
+        if !self.loaded || self.locked {
             return false;
         }
         let Some(pose) = &self.pose else { return false };
@@ -532,10 +614,12 @@ impl Viewer {
                     self.layer_mode = 1;
                 }
                 self.dirty = true;
-            } else if let (Some(p), Some(axis)) = (
-                &mut self.placement,
-                ["x", "y", "z"].iter().position(|name| *name == id),
-            ) {
+            } else if !self.locked
+                && let (Some(p), Some(axis)) = (
+                    &mut self.placement,
+                    ["x", "y", "z"].iter().position(|name| *name == id),
+                )
+            {
                 p.origin[axis] = value.clamp(-30_000_000, 30_000_000);
                 self.dirty = true;
             }
@@ -584,6 +668,50 @@ impl Viewer {
             return;
         }
         let key = match id {
+            "main" => {
+                self.screen = Screen::Main;
+                return;
+            }
+            "hotkeys" => {
+                self.screen = Screen::Hotkeys;
+                return;
+            }
+            "reset-hotkeys" => {
+                self.options.hotkeys.clear();
+                self.options.save();
+                return;
+            }
+            "verifier" => {
+                self.screen = Screen::Verifier;
+                self.verifier_page = 0;
+                return;
+            }
+            "lock" => {
+                if self.placement.is_some() {
+                    self.locked = !self.locked;
+                }
+                return;
+            }
+            "opacity" => {
+                self.options.opacity = match self.options.opacity {
+                    0..=25 => 45,
+                    26..=45 => 65,
+                    46..=65 => 90,
+                    _ => 25,
+                };
+                self.options.save();
+                self.dirty = true;
+                return;
+            }
+            "verify-previous" => {
+                self.verifier_page = self.verifier_page.saturating_sub(1);
+                return;
+            }
+            "verify-next" => {
+                self.verifier_page = (self.verifier_page + 1)
+                    .min(self.mismatch_count().div_ceil(menu::ROWS).saturating_sub(1));
+                return;
+            }
             "place" => {
                 self.dirty |= self.move_here();
                 return;
@@ -616,6 +744,9 @@ impl Viewer {
                 return;
             }
             "unload" => {
+                if self.locked {
+                    return;
+                }
                 self.placement = None;
                 self.dirty = true;
                 let _ = panel::close();
@@ -654,7 +785,9 @@ impl Viewer {
             "cw" => "KeyR",
             "ccw" => "RotateLeft",
             "mirror" => {
-                if let Some(p) = &mut self.placement {
+                if !self.locked
+                    && let Some(p) = &mut self.placement
+                {
                     // The button's axis is in world space. The core mirrors
                     // before rotating, so swap local axes on odd turns.
                     let flip = if self.flip_z ^ (p.quarter_turns % 2 != 0) {
@@ -721,7 +854,7 @@ impl Viewer {
         self.retired
             .extend(self.tiles.drain(..).filter(Tile::has_draws));
         self.cursor = 0;
-        if let Some(p) = self.placement.filter(|_| self.shown) {
+        if let Some(p) = self.placement.filter(|_| self.shown && self.render_all) {
             self.preview = Preview::new(p, self.layers());
             self.tiles = self.preview.tiles(self.schematic.size());
         }
@@ -744,13 +877,28 @@ impl Viewer {
     }
 
     fn show_label(&mut self, message: &str) {
-        if message != self.last_label {
+        if self.render_all && message != self.last_label {
             label(message);
             self.last_label = message.to_owned();
         }
     }
 
+    fn mismatch_count(&self) -> usize {
+        self.tiles.iter().map(Tile::mismatch_count).sum()
+    }
+
     fn publish_label(&mut self) {
+        if self.options.fast_place
+            && let Some((block, pos)) = self.aimed_block()
+            && self.tiles.iter().any(|tile| tile.is_missing(pos))
+        {
+            let message = format!(
+                "Fast Place | {} at {pos:?} | Aim through the ghost at its support",
+                block.name
+            );
+            self.show_label(&message);
+            return;
+        }
         if self.options.assist
             && let Some((block, pos)) = self.aimed_block()
         {
@@ -804,6 +952,8 @@ mod tests {
                 textured: true,
                 assist: false,
                 fast_place: false,
+                opacity: 65,
+                hotkeys: BTreeMap::new(),
             },
             true,
         );

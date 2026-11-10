@@ -146,7 +146,10 @@ fn prepare(
             });
         if let Some(expected) = &attempt.expected {
             let mode = stream.network_id_mode();
-            let placement = placement.as_ref()?;
+            let Some(placement) = placement.as_ref() else {
+                tracing::info!(block = %expected.name, "Fast Place could not predict this placement");
+                return None;
+            };
             if game_mode != Some(PlayerGameMode::Creative)
                 || observed.selection.item.count() == 0
                 || !world.is_air(expected.position).ok()?
@@ -159,6 +162,7 @@ fn prepare(
                     .block_canonical_state(mode, placement.block)
                     != Some(expected.states.as_str())
             {
+                tracing::info!(block = %expected.name, ghost = ?expected.position, "Fast Place predicted a different block or state");
                 return None;
             }
         }

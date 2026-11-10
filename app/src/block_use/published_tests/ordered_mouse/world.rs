@@ -144,7 +144,15 @@ fn boundary_fixture() -> (App, client_session::CapturedPackets) {
 
 #[test]
 fn ordered_fast_place_checks_the_predicted_state() {
-    for matching in [true, false] {
+    for (position, matching_state, places) in [
+        (DESTINATION, true, true),
+        (DESTINATION, false, false),
+        (
+            [DESTINATION[0], DESTINATION[1] + 1, DESTINATION[2]],
+            true,
+            false,
+        ),
+    ] {
         let (mut app, mut captured) = boundary_fixture();
         let world = app.world_mut();
         world
@@ -161,9 +169,9 @@ fn ordered_fast_place_checks_the_predicted_state() {
         world
             .resource_mut::<crate::block_use::creative::CreativePlacement>()
             .offer = Some(mod_host::CreativePlacementOffer {
-            position: DESTINATION,
+            position,
             name: "minecraft:stone".into(),
-            states: if matching {
+            states: if matching_state {
                 states
             } else {
                 r#"{"wrong":true}"#.into()
@@ -174,11 +182,11 @@ fn ordered_fast_place_checks_the_predicted_state() {
         super::before_physics(&mut app);
         assert_eq!(
             super::super::super::transaction_targets(&mut captured),
-            if matching { vec![CLICKED] } else { vec![] },
+            if places { vec![CLICKED] } else { vec![] },
         );
         assert_eq!(
             cell(app.world(), DESTINATION).unwrap(),
-            if matching {
+            if places {
                 stone
             } else {
                 block_id("minecraft:air")

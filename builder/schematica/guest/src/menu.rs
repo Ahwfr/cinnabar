@@ -1,4 +1,5 @@
 use crate::{Viewer, label, panel};
+use schematica_core::CellStatus;
 use serde_json::{Map, Value, json};
 
 pub const ROWS: usize = 7;
@@ -6,21 +7,30 @@ const CONTROL: &str = include_str!("../ui/control.json");
 const LOAD: &str = include_str!("../ui/load.json");
 const SETTINGS: &str = include_str!("../ui/settings.json");
 const MATERIALS: &str = include_str!("../ui/materials.json");
+const MAIN: &str = include_str!("../ui/main.json");
+const VERIFIER: &str = include_str!("../ui/verifier.json");
+const HOTKEYS: &str = include_str!("../ui/hotkeys.json");
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum Screen {
+    Main,
     Control,
     Load,
     Settings,
     Materials,
+    Verifier,
+    Hotkeys,
 }
 
 pub fn open(viewer: &Viewer, replace: bool) {
     let template = match viewer.screen {
+        Screen::Main => MAIN,
         Screen::Control => CONTROL,
         Screen::Load => LOAD,
         Screen::Settings => SETTINGS,
         Screen::Materials => MATERIALS,
+        Screen::Verifier => VERIFIER,
+        Screen::Hotkeys => HOTKEYS,
     };
     let result = panel::set_content(template).and_then(|()| update(viewer));
     let result = if replace {
@@ -49,6 +59,7 @@ fn update(viewer: &Viewer) -> Result<(), String> {
     out.insert("#blueprint".into(), json!(blueprint));
     let mut controls = Vec::new();
     match viewer.screen {
+        Screen::Main => {}
         Screen::Control => {
             let origin = viewer.placement.map(|p| p.origin);
             let values = [
@@ -69,6 +80,10 @@ fn update(viewer: &Viewer) -> Result<(), String> {
             out.insert(
                 "#visibility".into(),
                 json!(if viewer.shown { "Hide" } else { "Show" }),
+            );
+            out.insert(
+                "#lock".into(),
+                json!(if viewer.locked { "Unlock" } else { "Lock" }),
             );
             out.insert(
                 "#flip_axis".into(),
@@ -114,6 +129,10 @@ fn update(viewer: &Viewer) -> Result<(), String> {
         }
         Screen::Settings => {
             out.insert(
+                "#opacity".into(),
+                json!(format!("{}%", viewer.options.opacity)),
+            );
+            out.insert(
                 "#look".into(),
                 json!(if viewer.options.textured {
                     "Textures"
@@ -135,6 +154,15 @@ fn update(viewer: &Viewer) -> Result<(), String> {
             );
         }
         Screen::Materials => materials(viewer, &mut out),
+        Screen::Verifier => verifier(viewer, &mut out),
+        Screen::Hotkeys => {
+            for (index, (_, title, _)) in crate::hotkeys::BINDINGS.into_iter().enumerate() {
+                let value = crate::hotkeys::binding(&viewer.options.hotkeys, index);
+                out.insert(format!("#title{index}"), json!(title));
+                out.insert(format!("#bind{index}"), json!(value));
+                controls.push(json!({"id":format!("bind-{index}"),"value":value}));
+            }
+        }
     }
     panel::update_content(&json!({"bindings":out,"controls":controls}).to_string())
 }
@@ -173,21 +201,74 @@ fn materials(viewer: &Viewer, out: &mut Map<String, Value>) {
             short(&name.replace('_', " "), 26)
         });
         let total = line.map_or(String::new(), |line| line.total.to_string());
-        let needed = line.map_or(String::new(), |line| {
-            if !scanned {
-                return "-".into();
-            }
-            let indices = viewer.preview.material_indices(&line.name);
-            viewer
-                .tiles
-                .iter()
-                .map(|tile| tile.needed(&indices))
-                .sum::<u32>()
-                .to_string()
-        });
+        let counts = line.map_or_else(
+            || [String::new(), String::new(), String::new()],
+            |line| {
+                if !scanned {
+                    return ["-".into(), "-".into(), "-".into()];
+                }
+                let indices = viewer.preview.material_indices(&line.name);
+                viewer
+                    .tiles
+                    .iter()
+                    .map(|tile| tile.material_counts(&indices))
+                    .fold([0; 3], |sum, counts| {
+                        std::array::from_fn(|i| sum[i] + counts[i])
+                    })
+                    .map(|n| n.to_string())
+            },
+        );
         out.insert(format!("#row{row}"), json!(name));
         out.insert(format!("#total{row}"), json!(total));
-        out.insert(format!("#needed{row}"), json!(needed));
+        for (column, count) in ["needed", "placed", "unknown"].into_iter().zip(counts) {
+            out.insert(format!("#{column}{row}"), json!(count));
+        }
+    }
+}
+
+fn verifier(viewer: &Viewer, out: &mut Map<String, Value>) {
+    let total = viewer.mismatch_count();
+    let pending = viewer
+        .tiles
+        .iter()
+        .filter(|tile| tile.stamp.is_none())
+        .count();
+    let summary = if viewer.dirty || viewer.tiles.is_empty() {
+        "Show a placement in-world to scan.".into()
+    } else {
+        format!("{total} mismatches or unknown cells | {pending} tiles pending")
+    };
+    out.insert("#scan".into(), json!(summary));
+    out.insert(
+        "#page".into(),
+        json!(format!(
+            "{} / {}",
+            viewer.verifier_page + 1,
+            total.div_ceil(ROWS).max(1)
+        )),
+    );
+    let mut mismatches = viewer
+        .tiles
+        .iter()
+        .flat_map(|tile| &tile.mismatches)
+        .skip(viewer.verifier_page * ROWS);
+    for row in 0..ROWS {
+        let (coordinates, kind) = match mismatches.next().filter(|_| !viewer.dirty) {
+            Some(([x, y, z], status)) => {
+                let kind = match status {
+                    CellStatus::Missing => "Missing",
+                    CellStatus::Wrong => "Wrong block",
+                    CellStatus::WrongState => "Wrong state",
+                    CellStatus::Extra => "Extra",
+                    CellStatus::Unloaded => "Unknown",
+                    CellStatus::Correct => "",
+                };
+                (format!("{x}, {y}, {z}"), kind)
+            }
+            None => (String::new(), ""),
+        };
+        out.insert(format!("#pos{row}"), json!(coordinates));
+        out.insert(format!("#kind{row}"), json!(kind));
     }
 }
 

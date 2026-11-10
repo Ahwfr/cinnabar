@@ -1,4 +1,4 @@
-# Regenerates the four JSON-UI panels checked into guest/ui. Run with PowerShell 7.
+# Regenerates the JSON-UI panels checked into guest/ui. Run with PowerShell 7.
 $ErrorActionPreference = 'Stop'
 $ink = @(0.90,0.94,0.96,1)
 $muted = @(0.59,0.68,0.74,1)
@@ -54,7 +54,7 @@ function Add-Label($text,$x,$y,$w,$color=$ink,$align='left') {
 function Add-Header($active) {
     Add-Node (New-Rect 0 0 396 284 @(0.042,0.062,0.081,0.98) 8)
     Add-Node (New-Rect 0 0 396 3 $accent)
-    Add-Label 'SCHEMATICA' 16 14 118 $accent
+    Add-Button 'main' 'Schematica' 16 7 104 21 $activeFill
     Add-Label '#blueprint' 130 14 250 $ink 'right'
     $i=0
     foreach($tab in @(@('load','library','Library'),@('control','back','Controls'),@('materials','materials','Materials'),@('settings','settings','Settings'))){
@@ -68,11 +68,22 @@ function Add-Header($active) {
     Add-Node (New-Rect 16 245 364 1 $border)
 }
 
-foreach($screen in @('load','control','materials','settings')){
+foreach($screen in @('main','load','control','materials','settings','verifier','hotkeys')){
     $nodes=[Collections.Generic.List[object]]::new()
     $controls=[Collections.Generic.List[object]]::new()
     Add-Header $screen
     switch($screen){
+        'main' {
+            Add-Label 'SCHEMATIC TOOLS' 16 80 364 $accent
+            Add-Button 'library' 'Load schematic' 16 101 176 26
+            Add-Button 'back' 'Placement controls' 204 101 176 26
+            Add-Button 'materials' 'Material list' 16 136 176 26
+            Add-Button 'verifier' 'Schematic verifier' 204 136 176 26
+            Add-Button 'settings' 'Configuration' 16 171 176 26
+            Add-Button 'hotkeys' 'Hotkeys' 204 171 176 26
+            Add-Label 'Open Hotkeys to review or change bindings.' 16 220 364 $muted
+            Add-Button 'close' 'Done' 296 252 84 22 $activeFill
+        }
         'load' {
             Add-Label 'SELECT BLUEPRINT' 16 76 364 $muted
             for($i=0;$i -lt 8;$i++){
@@ -94,7 +105,7 @@ foreach($screen in @('load','control','materials','settings')){
             }
             Add-Button 'place' 'Move here' 26 161 154 22
             Add-Button 'visibility' '#visibility' 26 194 72 22
-            Add-Button 'unload' 'Unload' 104 194 76 22
+            Add-Button 'lock' '#lock' 104 194 76 22
             Add-Label 'TRANSFORM & LAYERS' 212 90 154 $accent
             Add-Button 'rotate-axis' '#rotate_axis' 212 111 76
             Add-Button 'rotate' 'Rotate' 294 111 76
@@ -104,20 +115,24 @@ foreach($screen in @('load','control','materials','settings')){
             Add-Label 'Layer' 320 175 50 $muted 'center'
             Add-Button 'mode' '#mode' 212 193 102 22
             Add-Button 'layer' '#layer' 320 193 50 22 $buttonFill $true
-            Add-Label 'Click a field to edit. Enter applies it.' 16 258 264 $muted
+            Add-Button 'unload' 'Unload' 16 252 84 22
             Add-Button 'close' 'Done' 296 252 84 22 $activeFill
         }
         'materials' {
             Add-Node (New-Rect 16 79 364 21 $surface 3)
-            Add-Label 'BLOCK' 24 84 211 $muted
-            Add-Label 'TOTAL' 245 84 53 $muted 'center'
-            Add-Label 'NEEDED' 306 84 62 $muted 'center'
+            Add-Label 'BLOCK' 24 84 151 $muted
+            Add-Label 'TOTAL' 174 84 43 $muted 'center'
+            Add-Label 'NEEDED' 220 84 48 $muted 'center'
+            Add-Label 'PLACED' 270 84 48 $muted 'center'
+            Add-Label 'UNKNOWN' 320 84 55 $muted 'center'
             for($i=0;$i -lt 7;$i++){
                 $y=104+17*$i
                 if($i%2 -eq 0){ Add-Node (New-Rect 16 ($y-2) 364 16 $surface 2) }
-                Add-Label "#row$i" 24 $y 211
-                Add-Label "#total$i" 245 $y 53 $ink 'center'
-                Add-Label "#needed$i" 306 $y 62 $accent 'center'
+                Add-Label "#row$i" 24 $y 151
+                Add-Label "#total$i" 174 $y 43 $ink 'center'
+                Add-Label "#needed$i" 220 $y 48 $accent 'center'
+                Add-Label "#placed$i" 270 $y 48 $ink 'center'
+                Add-Label "#unknown$i" 320 $y 55 $muted 'center'
             }
             Add-Label '#scan' 16 229 364 $muted
             Add-Button 'sort' '#sort' 16 252 125 22
@@ -130,15 +145,44 @@ foreach($screen in @('load','control','materials','settings')){
             Add-Node (New-Rect 16 80 364 46 $surface 5)
             Add-Label 'Block preview' 27 86 200
             Add-Label 'Uses the native block textures.' 27 104 210 $muted
-            Add-Button 'look' '#look' 246 91 121 24
+            Add-Button 'look' '#look' 208 91 76 24
+            Add-Button 'opacity' '#opacity' 290 91 77 24
             Add-Node (New-Rect 16 132 364 46 $surface 5)
             Add-Label 'Target info' 27 138 200
             Add-Label 'Shows the planned block and position.' 27 156 210 $muted
             Add-Button 'assist' '#assist' 246 143 121 24
             Add-Node (New-Rect 16 184 364 49 $surface 5)
             Add-Label 'Fast Place' 27 190 200
-            Add-Label 'Creative only. Right-click the guide.' 27 210 215 $muted
+            Add-Label 'Creative. Aim through ghost at support.' 27 210 215 $muted
             Add-Button 'fast-place' '#fast-place' 246 196 121 24
+            Add-Button 'hotkeys' 'Hotkeys' 16 252 84 22
+            Add-Button 'close' 'Done' 296 252 84 22 $activeFill
+        }
+        'verifier' {
+            Add-Node (New-Rect 16 79 364 21 $surface 3)
+            Add-Label 'COORDINATES' 24 84 188 $muted
+            Add-Label 'RESULT' 224 84 150 $muted
+            for($i=0;$i -lt 7;$i++){
+                $y=104+17*$i
+                if($i%2 -eq 0){ Add-Node (New-Rect 16 ($y-2) 364 16 $surface 2) }
+                Add-Label "#pos$i" 24 $y 188
+                Add-Label "#kind$i" 224 $y 150 $accent
+            }
+            Add-Label '#scan' 16 229 364 $muted
+            Add-Button 'verify-previous' '<' 156 252 28 22
+            Add-Label '#page' 187 258 56 $muted 'center'
+            Add-Button 'verify-next' '>' 246 252 28 22
+            Add-Button 'close' 'Done' 296 252 84 22 $activeFill
+        }
+        'hotkeys' {
+            for($i=0;$i -lt 12;$i++){
+                $x=16+188*[Math]::Floor($i/6)
+                $y=78+24*($i%6)
+                Add-Label "#title$i" $x ($y+5) 108 $muted
+                Add-Button "bind-$i" "#bind$i" ($x+112) $y 64 20 $buttonFill $true
+            }
+            Add-Label 'Example M+V. Enter applies. Blank unbinds.' 16 229 364 $muted
+            Add-Button 'reset-hotkeys' 'Reset defaults' 16 252 118 22
             Add-Button 'close' 'Done' 296 252 84 22 $activeFill
         }
     }

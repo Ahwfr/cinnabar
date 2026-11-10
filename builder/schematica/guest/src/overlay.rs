@@ -91,8 +91,9 @@ pub struct Tile {
     pub tally: Tally,
     pub fallback: bool,
     pub error: Option<String>,
-    needed: Vec<u16>,
+    materials: Vec<[u16; 3]>,
     statuses: Vec<CellStatus>,
+    pub mismatches: Vec<([i32; 3], CellStatus)>,
     markers: Option<DrawPair>,
     blocks: Option<DrawPair>,
     pending_frames: u8,
@@ -135,16 +136,22 @@ impl Tile {
         }
         self.stamp = None;
         self.statuses.clear();
-        self.needed.clear();
+        self.materials.clear();
+        self.mismatches.clear();
         self.tally = Tally::default();
     }
 
-    pub fn needed(&self, indices: &[usize]) -> u32 {
+    pub fn material_counts(&self, indices: &[usize]) -> [u32; 3] {
         indices
             .iter()
-            .filter_map(|&index| self.needed.get(index))
-            .map(|&count| u32::from(count))
-            .sum()
+            .filter_map(|&index| self.materials.get(index))
+            .fold([0; 3], |sum, counts| {
+                std::array::from_fn(|i| sum[i] + u32::from(counts[i]))
+            })
+    }
+
+    pub fn mismatch_count(&self) -> usize {
+        self.mismatches.len()
     }
 
     pub fn step(
@@ -152,14 +159,14 @@ impl Tile {
         preview: &Preview,
         schematic: &Schematic,
         dimension: i32,
-        textured: bool,
+        opacity: Option<f32>,
     ) -> bool {
         if let Some(region) = self.sample.take() {
             self.render(
                 preview,
                 schematic,
                 dimension,
-                textured && !self.fallback,
+                opacity.filter(|_| !self.fallback),
                 region,
             );
             return true;
@@ -203,7 +210,7 @@ impl Tile {
         preview: &Preview,
         schematic: &Schematic,
         dimension: i32,
-        textured: bool,
+        opacity: Option<f32>,
         region: terrain::Region,
     ) {
         let [sx, sy, sz] = [0, 1, 2].map(|i| self.hi[i] - self.lo[i]);
@@ -242,7 +249,7 @@ impl Tile {
             indices: Vec::new(),
         };
         let mut used_texture = false;
-        let mut needed = vec![0; preview.palette.len()];
+        let mut materials = vec![[0; 3]; preview.palette.len()];
         let mut tally = Tally::default();
         for x in 0..sx {
             for z in 0..sz {
@@ -253,21 +260,33 @@ impl Tile {
                     let mut word = DEFAULT_LIGHT;
                     if !air || status == CellStatus::Extra {
                         tally.add(status);
+                        if status != CellStatus::Correct {
+                            self.mismatches
+                                .push(([self.lo[0] + x, self.lo[1] + y, self.lo[2] + z], status));
+                        }
                     }
                     let color = match status {
                         CellStatus::Missing => {
-                            needed[id] += 1;
-                            if textured {
+                            materials[id][0] += 1;
+                            if opacity.is_some() {
                                 word |= id as u32 + 1;
                                 used_texture = true;
                             }
                             None
                         }
-                        CellStatus::Wrong => {
-                            needed[id] += 1;
+                        CellStatus::Wrong | CellStatus::WrongState => {
+                            materials[id][0] += 1;
                             Some((1., 0.7, 0.08, 0.52))
                         }
                         CellStatus::Extra => Some((1., 0.15, 0.12, 0.48)),
+                        CellStatus::Correct if !air => {
+                            materials[id][1] += 1;
+                            None
+                        }
+                        CellStatus::Unloaded if !air => {
+                            materials[id][2] += 1;
+                            None
+                        }
                         _ => None,
                     };
                     cells.push(word);
@@ -288,7 +307,7 @@ impl Tile {
                 Err(e) => self.error = Some(format!("Overlay: {}", e.detail)),
             }
         }
-        if used_texture {
+        if let Some(opacity) = opacity.filter(|_| used_texture) {
             let mut palette = vec![draw::BlockState::Named(draw::NamedBlock {
                 name: "minecraft:air".into(),
                 states: "{}".into(),
@@ -312,13 +331,13 @@ impl Tile {
                 palette,
                 cells,
             };
-            match create(draw::GeometrySpec::Blocks(grid), anchor, 0.65) {
+            match create(draw::GeometrySpec::Blocks(grid), anchor, opacity) {
                 Ok(pair) => self.blocks = Some(pair),
                 Err(e) => {
                     self.fallback = true;
                     self.error = Some(format!("Texture unavailable: {}", e.detail));
                     // Resample so mismatch markers and counts still update.
-                    self.needed = needed;
+                    self.materials = materials;
                     self.tally = tally;
                     return;
                 }
@@ -326,7 +345,7 @@ impl Tile {
         }
         self.stamp = Some(region.stamp);
         self.statuses = statuses;
-        self.needed = needed;
+        self.materials = materials;
         self.tally = tally;
     }
 }
@@ -364,7 +383,7 @@ fn compare(
         (false, false) if name != expected.name => CellStatus::Wrong,
         (false, false) => match block.canonical_state.as_deref() {
             Some(state) if state == expected.states => CellStatus::Correct,
-            Some(_) => CellStatus::Wrong,
+            Some(_) => CellStatus::WrongState,
             None => CellStatus::Unloaded,
         },
     }

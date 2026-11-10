@@ -10,6 +10,11 @@ On joining a world, the library waits for you to choose a blueprint. Press **Alt
 
 | Shortcut | Action |
 | --- | --- |
+| M / M+C | Open the main menu / configuration |
+| M+P / Numpad - | Open placement controls |
+| M+L / M+V | Open the materials table / verifier |
+| M+R / M+G | Toggle all schematic rendering / only the ghost blocks |
+| Page Up/Down / M+Page Up/Down | Change the selected layer / change the layer mode |
 | Alt+J | Open the blueprint library |
 | Alt+I | Open manipulation controls and the materials table |
 | Alt+K | Open preview and placement settings |
@@ -22,9 +27,11 @@ On joining a world, the library waits for you to choose a blueprint. Press **Alt
 
 Cinnabar keeps its regular chat, crouch, and pick-block controls. This release uses Alt chords so the slash keys, Numpad *, and Shift+middle-click can keep their normal Cinnabar behavior.
 
+Use **Hotkeys** in the main menu to change the Litematica-style bindings. Enter a key such as `F6` or a chord such as `M+V` and press Enter. A blank field unbinds that action. The placement lock prevents edits to the active guide. The verifier lists coordinates from the currently scanned layers and distinguishes missing blocks, wrong blocks, wrong states, extra blocks, and unknown cells.
+
 ## Preview and placement settings
 
-- **Block textures** uses Cinnabar's native block models and textures with 65% opacity on Builder. Stock Cinnabar uses the blocks' native opacity. **Hidden** turns off the missing-block preview. Yellow and red still mark wrong and extra blocks. [Cinnabar drawing contract](https://cinnabar.gg/docs/modding/reference/world-draw-drawing)
+- **Block textures** uses Cinnabar's native block models and textures with adjustable opacity on Builder, starting at 65%. Stock Cinnabar uses the blocks' native opacity. **Hidden** turns off the missing-block preview. Yellow and red still mark wrong and extra blocks. [Cinnabar drawing contract](https://cinnabar.gg/docs/modding/reference/world-draw-drawing)
 - **Target info** shows the expected material and coordinates under your aim.
 - **Fast Place** requires the matching Builder fork and the Inventory and Item Use grants. It selects or requests a Creative item for one right-click on a supported missing block. See the [Builder guide](../README.md).
 

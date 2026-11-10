@@ -78,6 +78,9 @@ pub(crate) fn press(
             ItemUseTrigger::PlayerInput,
             &state,
         ) else {
+            if creative::claim_without_support(context.creative.as_deref_mut(), game_mode) {
+                return false;
+            }
             runtime.record(
                 ItemUseTrigger::PlayerInput,
                 clock.now,

@@ -50,7 +50,7 @@ fn support(observed: &FrozenBlockObservation) -> ([i32; 3], u8, u32) {
     )
 }
 
-/// Claims a real press only if the normal ray's support borders the offered empty cell.
+/// Claims a press aimed at a missing ghost, and uses only a valid native support hit.
 pub(super) fn press(
     player: &mut client_state::PlayerRuntime,
     context: &mut BlockUseContext,
@@ -68,20 +68,29 @@ pub(super) fn press(
     if player.facts.player_game_mode() != Some(PlayerGameMode::Creative) {
         return Press::Ordinary;
     }
-    if observed.target.face > 5
-        || placement_cell(observed.target.position, observed.target.face) != offer.position
-        || !PaletteWorld::new(
-            stream.collision_store(),
-            context.collisions.registry(stream.network_id_mode()),
-            stream.current_dimension(),
-            Default::default(),
-        )
-        .observe(|world| world.is_air(offer.position).unwrap_or(false))
-        .is_ok_and(|observed| observed.value)
+    if !PaletteWorld::new(
+        stream.collision_store(),
+        context.collisions.registry(stream.network_id_mode()),
+        stream.current_dimension(),
+        Default::default(),
+    )
+    .observe(|world| world.is_air(offer.position).unwrap_or(false))
+    .is_ok_and(|observed| observed.value)
     {
         return Press::Ordinary;
     }
     policy.claimed = true;
+    if observed.target.face > 5
+        || placement_cell(observed.target.position, observed.target.face) != offer.position
+    {
+        tracing::info!(
+            ghost = ?offer.position,
+            support = ?observed.target.position,
+            face = observed.target.face,
+            "Fast Place needs the support face adjoining the ghost"
+        );
+        return Press::Consumed;
+    }
     if policy.pending.is_some() {
         return Press::Consumed;
     }
@@ -121,25 +130,32 @@ pub(super) fn press(
             .max_by_key(|(exact, _, _)| *exact)
     }));
     let prefer_catalog = catalog.is_some_and(|(_, (exact, _, _))| exact);
-    let (slot, key, request) =
-        if let Some((_, slot, key)) = hotbar.filter(|(exact, _, _)| *exact || !prefer_catalog) {
-            if slot == selected {
-                return Press::Ready(offer);
-            }
-            (slot, key, None)
-        } else {
-            let Some((slot, (_, id, item))) = catalog else {
-                return Press::Consumed;
-            };
-            let Ok(request) = player
-                .inventory
-                .ledger_mut()
-                .begin_windowless_creative_hotbar_take(id, slot)
-            else {
-                return Press::Consumed;
-            };
-            (slot, item, Some(request))
+    let (slot, key, request) = if let Some((_, slot, key)) =
+        hotbar.filter(|(exact, _, _)| *exact || !prefer_catalog)
+    {
+        if slot == selected {
+            return Press::Ready(offer);
+        }
+        (slot, key, None)
+    } else {
+        let Some((slot, (_, id, item))) = catalog else {
+            tracing::info!(
+                block = %offer.name,
+                empty_slot = empty.is_some(),
+                "Fast Place could not find a usable hotbar or Creative catalog item"
+            );
+            return Press::Consumed;
         };
+        let Ok(request) = player
+            .inventory
+            .ledger_mut()
+            .begin_windowless_creative_hotbar_take(id, slot)
+        else {
+            tracing::info!(block = %offer.name, slot, "Fast Place inventory request was refused locally");
+            return Press::Consumed;
+        };
+        (slot, item, Some(request))
+    };
     policy.pending = Some(Pending {
         offer,
         support: support(observed),
@@ -157,6 +173,22 @@ pub(super) fn press(
         selecting: false,
     });
     Press::Consumed
+}
+
+/// A ghost can receive the click even when there is no valid native block hit.
+pub(super) fn claim_without_support(
+    policy: Option<&mut CreativePlacement>,
+    mode: Option<PlayerGameMode>,
+) -> bool {
+    let Some(policy) = policy.filter(|_| mode == Some(PlayerGameMode::Creative)) else {
+        return false;
+    };
+    let Some(offer) = &policy.offer else {
+        return false;
+    };
+    policy.claimed = true;
+    tracing::info!(ghost = ?offer.position, "Fast Place needs an in-reach support block behind the ghost");
+    true
 }
 
 /// Clears any queued press if gameplay lost input ownership.

@@ -32,7 +32,7 @@ pub fn material_list(
             None => true,
             Some(w) => matches!(
                 classify(expected, w.block_at(wpos), mode),
-                CellStatus::Missing | CellStatus::Wrong
+                CellStatus::Missing | CellStatus::Wrong | CellStatus::WrongState
             ),
         };
         if needed {
