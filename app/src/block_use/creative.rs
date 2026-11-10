@@ -83,7 +83,7 @@ pub(super) fn press(
     if observed.target.face > 5
         || placement_cell(observed.target.position, observed.target.face) != offer.position
     {
-        tracing::info!(
+        bevy::log::info!(
             ghost = ?offer.position,
             support = ?observed.target.position,
             face = observed.target.face,
@@ -139,7 +139,7 @@ pub(super) fn press(
         (slot, key, None)
     } else {
         let Some((slot, (_, id, item))) = catalog else {
-            tracing::info!(
+            bevy::log::info!(
                 block = %offer.name,
                 empty_slot = empty.is_some(),
                 "Fast Place could not find a usable hotbar or Creative catalog item"
@@ -151,7 +151,7 @@ pub(super) fn press(
             .ledger_mut()
             .begin_windowless_creative_hotbar_take(id, slot)
         else {
-            tracing::info!(block = %offer.name, slot, "Fast Place inventory request was refused locally");
+            bevy::log::info!(block = %offer.name, slot, "Fast Place inventory request was refused locally");
             return Press::Consumed;
         };
         (slot, item, Some(request))
@@ -187,7 +187,7 @@ pub(super) fn claim_without_support(
         return false;
     };
     policy.claimed = true;
-    tracing::info!(ghost = ?offer.position, "Fast Place needs an in-reach support block behind the ghost");
+    bevy::log::info!(ghost = ?offer.position, "Fast Place needs an in-reach support block behind the ghost");
     true
 }
 

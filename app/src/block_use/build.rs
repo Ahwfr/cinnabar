@@ -147,7 +147,7 @@ fn prepare(
         if let Some(expected) = &attempt.expected {
             let mode = stream.network_id_mode();
             let Some(placement) = placement.as_ref() else {
-                tracing::info!(block = %expected.name, "Fast Place could not predict this placement");
+                bevy::log::info!(block = %expected.name, "Fast Place could not predict this placement");
                 return None;
             };
             if game_mode != Some(PlayerGameMode::Creative)
@@ -162,7 +162,7 @@ fn prepare(
                     .block_canonical_state(mode, placement.block)
                     != Some(expected.states.as_str())
             {
-                tracing::info!(block = %expected.name, ghost = ?expected.position, "Fast Place predicted a different block or state");
+                bevy::log::info!(block = %expected.name, ghost = ?expected.position, "Fast Place predicted a different block or state");
                 return None;
             }
         }
