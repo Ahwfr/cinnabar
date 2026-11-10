@@ -217,6 +217,8 @@ pub(super) fn placement_fixture() -> (
         pipelines: [pipeline; 5],
         clip: None,
         always: false,
+        opacity: 1.,
+        opacity_binding: None,
         active: false,
         _charge: ledger.allocate(0, || Some(())).unwrap(),
     };
@@ -246,6 +248,7 @@ fn retained_additive_terrain_weights_straight_alpha_only_for_blended_variants() 
                 always: false,
                 additive: true,
                 mirrored: false,
+                translucent: false,
             };
             for mut descriptor in pipeline::layouts::descriptors::build(false) {
                 let transparent = descriptor.fragment.as_ref().unwrap().targets[0]
