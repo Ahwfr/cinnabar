@@ -78,9 +78,7 @@ pub(crate) fn press(
             ItemUseTrigger::PlayerInput,
             &state,
         ) else {
-            if creative::claim_without_support(context.creative.as_deref_mut(), game_mode) {
-                return false;
-            }
+            creative::clear(context.creative.as_deref_mut());
             runtime.record(
                 ItemUseTrigger::PlayerInput,
                 clock.now,
@@ -91,11 +89,9 @@ pub(crate) fn press(
             );
             return true;
         };
-        let expected = match creative::press(&mut player, &mut context, &observed) {
-            creative::Press::Ordinary => None,
-            creative::Press::Consumed => return false,
-            creative::Press::Ready(offer) => Some(offer),
-        };
+        if creative::try_start(&mut player, &mut context, &observed) {
+            return false;
+        }
         let mut build = build::BuildInput::new(
             observed,
             state,
@@ -104,9 +100,7 @@ pub(crate) fn press(
             clock,
             input.context.view,
         );
-        let claimed = expected.is_some();
-        build.expected = expected;
-        let admit_item_use = build::advance(
+        build::advance(
             &mut player,
             &mut context,
             &mut runtime,
@@ -114,8 +108,7 @@ pub(crate) fn press(
             &mut swings,
             &mut movement,
             &mut build,
-        );
-        !claimed && admit_item_use
+        )
     })();
     runtime.clear_press();
     resolved

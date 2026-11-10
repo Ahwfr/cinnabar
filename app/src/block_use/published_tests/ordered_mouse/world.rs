@@ -143,14 +143,15 @@ fn boundary_fixture() -> (App, client_session::CapturedPackets) {
 }
 
 #[test]
-fn ordered_fast_place_checks_the_predicted_state() {
-    for (position, matching_state, places) in [
-        (DESTINATION, true, true),
-        (DESTINATION, false, false),
+fn ordered_fast_place_checks_the_predicted_state_and_allows_manual_placement() {
+    for (position, expected_name, matching_state) in [
+        (DESTINATION, "minecraft:stone", true),
+        (DESTINATION, "minecraft:stone", false),
+        (DESTINATION, "minecraft:glass", false),
         (
             [DESTINATION[0], DESTINATION[1] + 1, DESTINATION[2]],
+            "minecraft:stone",
             true,
-            false,
         ),
     ] {
         let (mut app, mut captured) = boundary_fixture();
@@ -170,7 +171,7 @@ fn ordered_fast_place_checks_the_predicted_state() {
             .resource_mut::<crate::block_use::creative::CreativePlacement>()
             .offer = Some(mod_host::CreativePlacementOffer {
             position,
-            name: "minecraft:stone".into(),
+            name: expected_name.into(),
             states: if matching_state {
                 states
             } else {
@@ -182,16 +183,9 @@ fn ordered_fast_place_checks_the_predicted_state() {
         super::before_physics(&mut app);
         assert_eq!(
             super::super::super::transaction_targets(&mut captured),
-            if places { vec![CLICKED] } else { vec![] },
+            vec![CLICKED],
         );
-        assert_eq!(
-            cell(app.world(), DESTINATION).unwrap(),
-            if places {
-                stone
-            } else {
-                block_id("minecraft:air")
-            },
-        );
+        assert_eq!(cell(app.world(), DESTINATION).unwrap(), stone);
     }
 }
 

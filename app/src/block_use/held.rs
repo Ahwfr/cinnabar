@@ -178,31 +178,18 @@ pub(super) fn maintain_block_use(
             trigger,
             &state,
         ) else {
-            if use_phase.pressed
-                && trigger == ItemUseTrigger::PlayerInput
-                && creative::claim_without_support(context.creative.as_deref_mut(), game_mode)
-            {
-                runtime.clear_press();
-                break;
-            }
             runtime.record(trigger, due, tick, LocalUse::Nothing, false, clock);
             continue;
         };
-        let expected = if use_phase.pressed && trigger == ItemUseTrigger::PlayerInput {
-            match creative::press(&mut player_runtime, &mut context, &observed) {
-                creative::Press::Ordinary => None,
-                creative::Press::Consumed => {
-                    runtime.clear_press();
-                    break;
-                }
-                creative::Press::Ready(offer) => Some(offer),
-            }
-        } else {
-            None
-        };
+        if use_phase.pressed
+            && trigger == ItemUseTrigger::PlayerInput
+            && creative::try_start(&mut player_runtime, &mut context, &observed)
+        {
+            runtime.clear_press();
+            break;
+        }
         let mut attempt =
             build::BuildInput::new(observed, state, trigger, due, clock, *context.view);
-        attempt.expected = expected;
         build::advance(
             &mut player_runtime,
             &mut context,

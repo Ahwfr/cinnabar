@@ -32,12 +32,6 @@ struct Pending {
     selecting: bool,
 }
 
-pub(super) enum Press {
-    Ordinary,
-    Consumed,
-    Ready(CreativePlacementOffer),
-}
-
 fn key(stack: &NetworkItemStack) -> StackKey {
     (stack.network_id, stack.metadata, stack.block_runtime_id)
 }
@@ -50,23 +44,23 @@ fn support(observed: &FrozenBlockObservation) -> ([i32; 3], u8, u32) {
     )
 }
 
-/// Claims a press aimed at a missing ghost, and uses only a valid native support hit.
-pub(super) fn press(
+/// Starts an assisted item selection, leaving ordinary placement available otherwise.
+pub(super) fn try_start(
     player: &mut client_state::PlayerRuntime,
     context: &mut BlockUseContext,
     observed: &FrozenBlockObservation,
-) -> Press {
+) -> bool {
     let Some(policy) = context.creative.as_deref_mut() else {
-        return Press::Ordinary;
+        return false;
     };
     let Some(stream) = context.client_world.stream.as_ref() else {
-        return Press::Ordinary;
+        return false;
     };
     let Some(offer) = policy.offer.clone() else {
-        return Press::Ordinary;
+        return false;
     };
     if player.facts.player_game_mode() != Some(PlayerGameMode::Creative) {
-        return Press::Ordinary;
+        return false;
     }
     if !PaletteWorld::new(
         stream.collision_store(),
@@ -77,24 +71,8 @@ pub(super) fn press(
     .observe(|world| world.is_air(offer.position).unwrap_or(false))
     .is_ok_and(|observed| observed.value)
     {
-        return Press::Ordinary;
+        return false;
     }
-    policy.claimed = true;
-    if observed.target.face > 5
-        || placement_cell(observed.target.position, observed.target.face) != offer.position
-    {
-        bevy::log::info!(
-            ghost = ?offer.position,
-            support = ?observed.target.position,
-            face = observed.target.face,
-            "Fast Place needs the support face adjoining the ghost"
-        );
-        return Press::Consumed;
-    }
-    if policy.pending.is_some() {
-        return Press::Consumed;
-    }
-
     let ledger = player.inventory.ledger();
     let mode = stream.network_id_mode();
     let quality = |stack: &NetworkItemStack| {
@@ -104,16 +82,35 @@ pub(super) fn press(
         })
     };
     let selected = observed.selection.slot;
-    let selected_quality = ledger.backing_stack(selected).and_then(quality);
-    if selected_quality == Some(true) {
-        return Press::Ready(offer);
+    if ledger.backing_stack(selected).and_then(quality).is_some() {
+        policy.pending = None;
+        policy.claimed = false;
+        return false;
     }
+    policy.claimed = false;
+    if observed.target.face > 5
+        || placement_cell(observed.target.position, observed.target.face) != offer.position
+    {
+        bevy::log::info!(
+            ghost = ?offer.position,
+            support = ?observed.target.position,
+            face = observed.target.face,
+            "Fast Place needs the support face adjoining the ghost"
+        );
+        policy.pending = None;
+        return false;
+    }
+    if policy.pending.is_some() {
+        policy.claimed = true;
+        return true;
+    }
+
     let hotbar = (0..protocol::HOTBAR_SLOT_COUNT)
         .filter_map(|slot| {
             let stack = ledger.backing_stack(slot)?;
             Some((quality(stack)?, slot, key(stack)))
         })
-        .max_by_key(|(exact, slot, _)| (*exact, *slot == selected));
+        .max_by_key(|(exact, _, _)| *exact);
     let empty = (0..protocol::HOTBAR_SLOT_COUNT)
         .find(|slot| matches!(ledger.slot_state(*slot), Some(PlayerInventorySlot::Empty)));
     let catalog = empty.zip(ledger.creative_catalog().and_then(|catalog| {
@@ -133,9 +130,6 @@ pub(super) fn press(
     let (slot, key, request) = if let Some((_, slot, key)) =
         hotbar.filter(|(exact, _, _)| *exact || !prefer_catalog)
     {
-        if slot == selected {
-            return Press::Ready(offer);
-        }
         (slot, key, None)
     } else {
         let Some((slot, (_, id, item))) = catalog else {
@@ -144,7 +138,7 @@ pub(super) fn press(
                 empty_slot = empty.is_some(),
                 "Fast Place could not find a usable hotbar or Creative catalog item"
             );
-            return Press::Consumed;
+            return false;
         };
         let request = match player
             .inventory_commands()
@@ -153,11 +147,12 @@ pub(super) fn press(
             Ok(request) => request,
             Err(error) => {
                 bevy::log::info!(block = %offer.name, slot, %error, "Fast Place inventory request was refused locally");
-                return Press::Consumed;
+                return false;
             }
         };
         (slot, item, Some(request))
     };
+    policy.claimed = true;
     policy.pending = Some(Pending {
         offer,
         support: support(observed),
@@ -174,22 +169,6 @@ pub(super) fn press(
         request,
         selecting: false,
     });
-    Press::Consumed
-}
-
-/// A ghost can receive the click even when there is no valid native block hit.
-pub(super) fn claim_without_support(
-    policy: Option<&mut CreativePlacement>,
-    mode: Option<PlayerGameMode>,
-) -> bool {
-    let Some(policy) = policy.filter(|_| mode == Some(PlayerGameMode::Creative)) else {
-        return false;
-    };
-    let Some(offer) = &policy.offer else {
-        return false;
-    };
-    policy.claimed = true;
-    bevy::log::info!(ghost = ?offer.position, "Fast Place needs an in-reach support block behind the ghost");
     true
 }
 
