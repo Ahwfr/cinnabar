@@ -111,6 +111,14 @@ pub struct GameplayFacts {
     pub block_target: Option<GameplayVector3>,
 }
 
+/// A component's offered destination and expected block state for a Creative use press.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CreativePlacementOffer {
+    pub position: [i32; 3],
+    pub name: String,
+    pub states: String,
+}
+
 /// Successfully committed local interaction requests, consumed once per frame.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct InteractionOutput {

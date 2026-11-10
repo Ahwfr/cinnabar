@@ -42,7 +42,7 @@ function Write-Uleb([IO.Stream]$Stream, [int]$Value) {
 function Set-ComponentGrants([byte[]]$Component, [IO.Stream]$OutputStream) {
     $encoding = [Text.Encoding]::UTF8
     $name = $encoding.GetBytes('cinnabar:grants')
-    $request = $encoding.GetBytes('{"terrain":true,"controls":true,"world_draw":true,"render_material":true,"settings":true}')
+    $request = $encoding.GetBytes('{"terrain":true,"controls":true,"world_draw":true,"render_material":true,"settings":true,"inventory":true,"item_use":true}')
     $newSection = [IO.MemoryStream]::new()
     try {
         Write-Uleb $newSection $name.Length

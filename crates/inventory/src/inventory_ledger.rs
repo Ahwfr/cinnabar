@@ -520,6 +520,12 @@ impl PlayerInventoryLedger {
         self.gestures().count()
     }
 
+    /// Whether the server still owes a result for this inventory request.
+    pub fn has_pending_request(&self, request_id: i32) -> bool {
+        self.pending_requests()
+            .any(|pending| pending.request_id == request_id)
+    }
+
     /// Queues a mine-block prediction for hotbar `slot` and returns the id its
     /// PlayerAuthInput carries; `None` sends the break without a request.
     pub fn begin_mining_request(&mut self, slot: u8, predicted_damage: i32) -> Option<i32> {

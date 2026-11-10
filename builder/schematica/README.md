@@ -25,7 +25,8 @@ Cinnabar keeps its regular chat, crouch, and pick-block controls. This release u
 ## Preview and placement settings
 
 - **Block textures** uses Cinnabar's native block models and textures with 65% opacity on Builder. Stock Cinnabar uses the blocks' native opacity. **Hidden** turns off the missing-block preview. Yellow and red still mark wrong and extra blocks. [Cinnabar drawing contract](https://cinnabar.gg/docs/modding/reference/world-draw-drawing)
-- **Target info** shows the expected material and coordinates under your aim. You place the block with the regular game controls. Cinnabar exposes an ordinary use pulse and a mining target override, while directed item placement and selecting a hotbar item on the player's behalf are unavailable to this mod. [Cinnabar input API](https://cinnabar.gg/docs/modding/guides/input)
+- **Target info** shows the expected material and coordinates under your aim.
+- **Fast Place** requires the matching Builder fork and the Inventory and Item Use grants. It selects or requests a Creative item for one right-click on a supported missing block. See the [Builder guide](../README.md).
 
 ## Create a library with your own files
 

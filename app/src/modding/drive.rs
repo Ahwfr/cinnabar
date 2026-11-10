@@ -30,6 +30,7 @@ pub(super) struct ModObservation<'w, 's> {
     native_camera: Local<'s, native_camera::NativeCamera>,
     bindings: Local<'s, bindings::Bindings>,
     input_settings: Option<Res<'w, client_state::RuntimeSettings>>,
+    creative_placement: Option<ResMut<'w, crate::block_use::creative::CreativePlacement>>,
     #[cfg(all(feature = "developer-control", not(target_arch = "wasm32")))]
     pointer_isolation: Option<ResMut<'w, crate::developer_control::cursor_isolation::Isolation>>,
 }
@@ -75,6 +76,7 @@ pub(super) fn drive_mod(
         mut native_camera,
         mut bindings,
         input_settings,
+        mut creative_placement,
         #[cfg(all(feature = "developer-control", not(target_arch = "wasm32")))]
         mut pointer_isolation,
     } = observation;
@@ -89,6 +91,9 @@ pub(super) fn drive_mod(
     }
     if let Some(policy) = item_use.as_deref_mut() {
         policy.pulse = false;
+    }
+    if let Some(placement) = creative_placement.as_deref_mut() {
+        placement.offer = None;
     }
     let user_freelook = gameplay
         .input
@@ -449,6 +454,15 @@ pub(super) fn drive_mod(
     interaction.attack_pulse = attack_pulse;
     if let Some(policy) = item_use.as_deref_mut() {
         policy.pulse = use_pulse;
+    }
+    if enabled
+        && !use_pulse
+        && let Some(placement) = creative_placement.as_deref_mut()
+    {
+        placement.offer = extension
+            .hosts
+            .iter_mut()
+            .find_map(|host| host.creative_placement_offer().cloned());
     }
     if let Some((index, error)) = filter_error {
         callback_failed = true;

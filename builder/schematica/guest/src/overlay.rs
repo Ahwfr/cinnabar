@@ -112,6 +112,16 @@ impl DrawPair {
 }
 
 impl Tile {
+    pub(crate) fn is_missing(&self, world: [i32; 3]) -> bool {
+        if (0..3).any(|axis| world[axis] < self.lo[axis] || world[axis] >= self.hi[axis]) {
+            return false;
+        }
+        let [x, y, z] = [0, 1, 2].map(|axis| world[axis] - self.lo[axis]);
+        let height = self.hi[1] - self.lo[1];
+        let depth = self.hi[2] - self.lo[2];
+        self.statuses.get(((x * depth + z) * height + y) as usize) == Some(&CellStatus::Missing)
+    }
+
     pub fn has_draws(&self) -> bool {
         self.markers.is_some() || self.blocks.is_some()
     }
@@ -360,7 +370,7 @@ fn compare(
     }
 }
 
-fn canonical(state: &BlockState) -> String {
+pub(crate) fn canonical(state: &BlockState) -> String {
     let mut properties = Map::new();
     for (name, value) in &state.states {
         let typed = match value {

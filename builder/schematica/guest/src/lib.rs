@@ -8,7 +8,7 @@ mod menu;
 mod overlay;
 
 use cinnabar::{
-    extension::{budget, gameplay, hud, input, panel, settings, terrain},
+    extension::{budget, gameplay, hud, input, item_use, panel, settings, terrain},
     world_draw::drawing,
 };
 use menu::Screen;
@@ -18,20 +18,21 @@ use std::{cell::RefCell, collections::BTreeMap, f32::consts::TAU};
 
 thread_local! {
     static RUNTIME: RefCell<(Runtime, Vec<&'static [u8]>, Options)> =
-        const { RefCell::new((Runtime::Start, Vec::new(), Options { textured: true, assist: false })) };
+        const { RefCell::new((Runtime::Start, Vec::new(), Options { textured: true, assist: false, fast_place: false })) };
 }
 
 #[derive(Clone, Copy)]
 struct Options {
     textured: bool,
     assist: bool,
+    fast_place: bool,
 }
 
 impl Options {
     fn save(self) {
         let _ = settings::save(
             &serde_json::json!({
-                "textured":self.textured, "assist":self.assist,
+                "textured":self.textured, "assist":self.assist, "fast_place": self.fast_place,
             })
             .to_string(),
         );
@@ -65,6 +66,7 @@ impl Guest for Schematica {
                 let options = &mut state.borrow_mut().2;
                 options.textured = value["textured"].as_bool().unwrap_or(options.textured);
                 options.assist = value["assist"].as_bool().unwrap_or(options.assist);
+                options.fast_place = value["fast_place"].as_bool().unwrap_or(options.fast_place);
             });
         }
         label("Schematica | Alt+J library | Alt+I controls | Alt+K settings");
@@ -385,6 +387,18 @@ impl Viewer {
             self.dirty = false;
             return;
         }
+        if self.options.fast_place
+            && let Some(placement) = self.placement
+            && let Some((block, pos @ [x, y, z])) = self.aimed_block()
+            && self.tiles.iter().any(|tile| tile.is_missing(pos))
+        {
+            let block = placement.transform_state(block);
+            let _ = item_use::offer_creative_placement(
+                (x, y, z),
+                &block.name,
+                &overlay::canonical(&block),
+            );
+        }
         if !self.retired.is_empty() {
             // A tile owns up to four handles. Stay under the host's 32 drawing
             // calls per callback even when moving or hiding a large guide.
@@ -596,6 +610,11 @@ impl Viewer {
                 self.options.save();
                 return;
             }
+            "fast-place" => {
+                self.options.fast_place = !self.options.fast_place;
+                self.options.save();
+                return;
+            }
             "unload" => {
                 self.placement = None;
                 self.dirty = true;
@@ -784,6 +803,7 @@ mod tests {
             Options {
                 textured: true,
                 assist: false,
+                fast_place: false,
             },
             true,
         );

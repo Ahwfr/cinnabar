@@ -34,7 +34,7 @@ You can also pass exact files, or install the built-in arch to try the flow:
 .\builder\Start-Builder.ps1 -ImportOnly -Demo
 ```
 
-Target info identifies the planned material under the crosshair. Creative Easy Place remains on the roadmap.
+**Fast Place** is off by default. In a Creative world, open **Alt+K** and turn it on. Grant **Inventory** and **Item Use** in Settings → Mods if requested. Aim through a missing guide block at its support face and right-click once. Builder uses a matching hotbar block or takes one from Creative into an empty hotbar slot, then places it after the inventory confirms it. Leave a hotbar slot free if you do not already carry the block. Use the orientation that produces the planned state. Fast Place skips states the native placement preview cannot verify, including multi-block placements. Reimport your schematic after upgrading so the library has the new controls.
 
 ## Update for a new Bedrock version
 

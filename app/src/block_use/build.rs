@@ -14,6 +14,7 @@ pub(crate) struct BuildInput {
     pub due: std::time::Duration,
     pub clock: RepeatClock,
     view: LocalViewPose,
+    pub(super) expected: Option<mod_host::CreativePlacementOffer>,
 }
 
 /// A proposal freezes selection, placement and inventory effects before its first send.
@@ -52,6 +53,7 @@ impl BuildInput {
             due,
             clock,
             view,
+            expected: None,
         }
     }
 }
@@ -142,6 +144,24 @@ fn prepare(
                     attempt.view,
                 )
             });
+        if let Some(expected) = &attempt.expected {
+            let mode = stream.network_id_mode();
+            let placement = placement.as_ref()?;
+            if game_mode != Some(PlayerGameMode::Creative)
+                || observed.selection.item.count() == 0
+                || !world.is_air(expected.position).ok()?
+                || placement.position != expected.position
+                || !placement.additional.is_empty()
+                || context.collisions.block_identifier(mode, placement.block)
+                    != Some(expected.name.as_str())
+                || context
+                    .collisions
+                    .block_canonical_state(mode, placement.block)
+                    != Some(expected.states.as_str())
+            {
+                return None;
+            }
+        }
         if placement.is_some() && observed.selection.item.count() > 0 {
             local_use = LocalUse::Place;
         }

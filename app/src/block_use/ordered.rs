@@ -88,6 +88,11 @@ pub(crate) fn press(
             );
             return true;
         };
+        let expected = match creative::press(&mut player, &mut context, &observed) {
+            creative::Press::Ordinary => None,
+            creative::Press::Consumed => return false,
+            creative::Press::Ready(offer) => Some(offer),
+        };
         let mut build = build::BuildInput::new(
             observed,
             state,
@@ -96,7 +101,9 @@ pub(crate) fn press(
             clock,
             input.context.view,
         );
-        build::advance(
+        let claimed = expected.is_some();
+        build.expected = expected;
+        let admit_item_use = build::advance(
             &mut player,
             &mut context,
             &mut runtime,
@@ -104,7 +111,8 @@ pub(crate) fn press(
             &mut swings,
             &mut movement,
             &mut build,
-        )
+        );
+        !claimed && admit_item_use
     })();
     runtime.clear_press();
     resolved

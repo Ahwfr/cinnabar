@@ -53,6 +53,7 @@ pub(super) fn maintain_block_use(
         .zip(caps)
         .filter(|(_, caps)| focused && !context.focus.ui_focused && caps.can_use_blocks())
     else {
+        creative::clear(context.creative.as_deref_mut());
         runtime.clear_press();
         stop_block_use(&mut runtime, &context, false);
         return;
@@ -83,6 +84,22 @@ pub(super) fn maintain_block_use(
             && (attacking || use_phase.pressed || !use_phase.held)))
         && !stop_block_use(&mut runtime, &context, use_phase.pressed && !attacking)
     {
+        return;
+    }
+    if attacking {
+        creative::clear(context.creative.as_deref_mut());
+    } else if creative::resume(
+        &mut player_runtime,
+        &mut context,
+        &mut runtime,
+        &mut item_use,
+        &mut swings,
+        &mut movement,
+        pick,
+        use_phase.held,
+        input_mode,
+        input_authority,
+    ) {
         return;
     }
     if !runtime.observe_use(

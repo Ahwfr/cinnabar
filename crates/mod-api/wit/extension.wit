@@ -924,6 +924,9 @@ interface item-use {
     /// one air use per tick from a hotbar slot, still apply. Requires a gameplay frame. An active
     /// action filter receives it as a repeat.
     pulse-use: func() -> result<_, string>;
+    /// Offers one expected block state for the next real Creative use press.
+    /// Requires both item-use and inventory grants. Omission withdraws the offer.
+    offer-creative-placement: func(position: tuple<s32, s32, s32>, name: string, states: string) -> result<_, string>;
 }
 
 /// Bounded local terrain reads. The queries a callback reads become its subscriptions, which the

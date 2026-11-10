@@ -125,6 +125,14 @@ fn update(viewer: &Viewer) -> Result<(), String> {
                 "#assist".into(),
                 json!(if viewer.options.assist { "On" } else { "Off" }),
             );
+            out.insert(
+                "#fast-place".into(),
+                json!(if viewer.options.fast_place {
+                    "On"
+                } else {
+                    "Off"
+                }),
+            );
         }
         Screen::Materials => materials(viewer, &mut out),
     }

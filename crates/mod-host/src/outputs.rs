@@ -23,6 +23,11 @@ impl ModHost {
         self.instance.use_pulse_requested()
     }
 
+    /// Reads this frame's Creative offer only while the component is active.
+    pub fn creative_placement_offer(&self) -> Option<&crate::CreativePlacementOffer> {
+        self.instance.creative_placement_offer()
+    }
+
     /// Successfully committed local weather target, in rain/thunder channel order.
     pub fn weather_override(&self) -> Option<[f32; 2]> {
         use crate::runtime::cinnabar::extension::environment::Weather;

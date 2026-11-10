@@ -689,6 +689,12 @@ impl Instance {
         self.is_active() && self.store.data().item_use_policy.pulse
     }
 
+    pub(super) fn creative_placement_offer(&self) -> Option<&crate::CreativePlacementOffer> {
+        self.is_active()
+            .then(|| self.store.data().item_use_policy.placement.as_ref())
+            .flatten()
+    }
+
     /// Current-frame relative camera heading from a successful focused gameplay callback.
     pub(super) fn camera_yaw_offset(&self) -> Option<f32> {
         (!self.store.data().exclusive.camera)

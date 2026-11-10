@@ -70,6 +70,45 @@ fn creative_take_moves_a_full_stack_into_the_cursor() {
 }
 
 #[test]
+fn gameplay_creative_take_keeps_the_hotbar_unconfirmed_until_the_server_accepts() {
+    let mut ledger = PlayerInventoryLedger::default();
+    ledger.apply(&InventoryEvent::Authority(InventoryAuthority::Server));
+    ledger.apply_registry(&registry());
+    ledger.apply(&InventoryEvent::Content(InventoryContentEvent {
+        container: ContainerIdentity::window(0),
+        slots: vec![NetworkItemStack::empty(); PLAYER_INVENTORY_SLOT_COUNT].into(),
+        storage_item: NetworkItemStack::empty(),
+    }));
+    assert!(ledger.begin_windowless_creative_hotbar_take(44, 4).is_err());
+    creative(&mut ledger);
+    assert!(
+        ledger
+            .begin_windowless_creative_hotbar_take(44, 10)
+            .is_err()
+    );
+    let request = ledger.begin_windowless_creative_hotbar_take(44, 4).unwrap();
+    assert!(!ledger.personal_inventory_desired_open());
+    assert!(ledger.has_pending_request(request));
+    assert!(ledger.backing_stack(4).is_none());
+    assert_eq!(ledger.displayed_stack(4).unwrap().count, 1);
+    assert!(ledger.pending_batch().unwrap().is_some());
+    assert!(ledger.mark_transport_enqueued(10));
+    respond(
+        &mut ledger,
+        request,
+        &[(
+            protocol::CONTAINER_NAME_COMBINED_HOTBAR_AND_INVENTORY,
+            4,
+            1,
+            700,
+        )],
+    );
+    assert!(!ledger.has_pending_request(request));
+    assert_eq!(ledger.backing_stack(4).unwrap().stack_network_id, 700);
+    assert!(ledger.begin_windowless_creative_hotbar_take(44, 4).is_err());
+}
+
+#[test]
 fn creative_take_refuses_unparsed_stack_size_data() {
     for unrelated_depth in [0, 40] {
         let mut ledger = ledger(PERSONAL_INVENTORY_WINDOW_TYPE);

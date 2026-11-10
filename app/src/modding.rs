@@ -463,6 +463,7 @@ fn configure_systems(app: &mut App, watching: bool) {
     fullbright::configure(app);
     terrain_surfaces::configure(app);
     app.init_resource::<crate::item_use::ModItemUsePolicy>()
+        .init_resource::<crate::block_use::creative::CreativePlacement>()
         .init_resource::<ModCueFeed>()
         .add_plugins(::render::ModRenderPlugin)
         .add_systems(Update, render::grant_depth_sampling);

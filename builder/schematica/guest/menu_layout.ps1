@@ -127,15 +127,18 @@ foreach($screen in @('load','control','materials','settings')){
             Add-Button 'close' 'Done' 296 252 84 22 $activeFill
         }
         'settings' {
-            Add-Node (New-Rect 16 80 364 60 $surface 5)
-            Add-Label 'Block preview' 27 92 200
-            Add-Label 'Uses the native block textures.' 27 114 210 $muted
-            Add-Button 'look' '#look' 246 97 121 24
-            Add-Node (New-Rect 16 149 364 60 $surface 5)
-            Add-Label 'Target info' 27 161 200
-            Add-Label 'Shows the planned block and position.' 27 183 210 $muted
-            Add-Button 'assist' '#assist' 246 166 121 24
-            Add-Label 'Alt+U identifies the aimed block once.' 16 226 364 $muted
+            Add-Node (New-Rect 16 80 364 46 $surface 5)
+            Add-Label 'Block preview' 27 86 200
+            Add-Label 'Uses the native block textures.' 27 104 210 $muted
+            Add-Button 'look' '#look' 246 91 121 24
+            Add-Node (New-Rect 16 132 364 46 $surface 5)
+            Add-Label 'Target info' 27 138 200
+            Add-Label 'Shows the planned block and position.' 27 156 210 $muted
+            Add-Button 'assist' '#assist' 246 143 121 24
+            Add-Node (New-Rect 16 184 364 49 $surface 5)
+            Add-Label 'Fast Place' 27 190 200
+            Add-Label 'Creative only. Right-click the guide.' 27 210 215 $muted
+            Add-Button 'fast-place' '#fast-place' 246 196 121 24
             Add-Button 'close' 'Done' 296 252 84 22 $activeFill
         }
     }
