@@ -1,4 +1,5 @@
 # Regenerates the JSON-UI panels checked into guest/ui. Run with PowerShell 7.
+param([string[]]$Screens = @('main','load','control','materials','settings','verifier','hotkeys'))
 $ErrorActionPreference = 'Stop'
 $ink = @(0.90,0.94,0.96,1)
 $muted = @(0.59,0.68,0.74,1)
@@ -71,7 +72,7 @@ function Add-Header($active) {
     Add-Node (New-Rect 16 245 364 1 $border)
 }
 
-foreach($screen in @('main','load','control','materials','settings','verifier','hotkeys')){
+foreach($screen in $Screens){
     $nodes=[Collections.Generic.List[object]]::new()
     $controls=[Collections.Generic.List[object]]::new()
     Add-Header $screen
@@ -145,19 +146,23 @@ foreach($screen in @('main','load','control','materials','settings','verifier','
             Add-Button 'close' 'Done' 296 252 84 22 $activeFill
         }
         'settings' {
-            Add-Node (New-Rect 16 80 364 46 $surface 5)
-            Add-Label 'Block preview' 27 86 200
-            Add-Label 'Uses the native block textures.' 27 104 210 $muted
-            Add-Button 'look' '#look' 208 91 76 24
-            Add-Button 'opacity' '#opacity' 290 91 77 24
-            Add-Node (New-Rect 16 132 364 46 $surface 5)
-            Add-Label 'Target info' 27 138 200
-            Add-Label 'Shows the planned block and position.' 27 156 210 $muted
-            Add-Button 'assist' '#assist' 246 143 121 24
-            Add-Node (New-Rect 16 184 364 49 $surface 5)
-            Add-Label 'Fast Place' 27 190 200
-            Add-Label 'Inventory blocks; Creative can supply.' 27 210 215 $muted
-            Add-Button 'fast-place' '#fast-place' 246 196 121 24
+            Add-Node (New-Rect 16 80 364 35 $surface 5)
+            Add-Label 'Block preview' 27 84 175
+            Add-Label 'Native block textures.' 27 100 175 $muted
+            Add-Button 'look' '#look' 208 86 76 24
+            Add-Button 'opacity' '#opacity' 290 86 77 24
+            Add-Node (New-Rect 16 119 364 35 $surface 5)
+            Add-Label 'Target info' 27 123 200
+            Add-Label 'Shows the planned block and position.' 27 139 210 $muted
+            Add-Button 'assist' '#assist' 246 125 121 24
+            Add-Node (New-Rect 16 158 364 35 $surface 5)
+            Add-Label 'Fast Place' 27 162 200
+            Add-Label 'Uses inventory or Creative catalog.' 27 178 210 $muted
+            Add-Button 'fast-place' '#fast-place' 246 164 121 24
+            Add-Node (New-Rect 16 197 364 35 $surface 5)
+            Add-Label 'Auto orientation' 27 201 200
+            Add-Label 'Server aim only. Camera stays still.' 27 217 210 $muted
+            Add-Button 'correct-aim' '#correct-aim' 246 203 121 24
             Add-Button 'hotkeys' 'Hotkeys' 16 252 84 22
             Add-Button 'close' 'Done' 296 252 84 22 $activeFill
         }

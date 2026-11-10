@@ -119,6 +119,7 @@ pub struct CreativePlacementOffer {
     pub position: [i32; 3],
     pub name: String,
     pub states: String,
+    pub correct_aim: bool,
 }
 
 /// Successfully committed local interaction requests, consumed once per frame.

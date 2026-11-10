@@ -152,6 +152,14 @@ fn update(viewer: &Viewer) -> Result<(), String> {
                     "Off"
                 }),
             );
+            out.insert(
+                "#correct-aim".into(),
+                json!(if viewer.options.correct_aim {
+                    "On"
+                } else {
+                    "Off"
+                }),
+            );
         }
         Screen::Materials => materials(viewer, &mut out),
         Screen::Verifier => verifier(viewer, &mut out),

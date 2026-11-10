@@ -39,6 +39,7 @@ use {
 mod actor_use;
 mod build;
 pub(crate) mod creative;
+mod orientation;
 mod world_observation;
 use world_observation::use_surroundings;
 pub(crate) mod ordered;

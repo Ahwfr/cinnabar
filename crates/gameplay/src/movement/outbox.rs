@@ -64,8 +64,8 @@ impl MovementOutboxReconciliation {
 }
 
 use super::{
-    MovementTicker, PhysicsAuthorityFault, PhysicsSendIdentity, PhysicsTickEvidenceContext,
-    QueuedPhysicsSample, SentPhysicsSample,
+    MovementTicker, PLACEMENT_FACING_TICKS, PhysicsAuthorityFault, PhysicsSendIdentity,
+    PhysicsTickEvidenceContext, PlacementFacing, QueuedPhysicsSample, SentPhysicsSample,
 };
 
 /// A release batch fenced behind the input tick that carries its facing.
@@ -344,8 +344,43 @@ impl MovementTicker {
             session_generation: sample.session_generation,
             tick: sample.snapshot.tick,
             position: sample.snapshot.position,
+            facing: [sample.snapshot.pitch, sample.snapshot.yaw],
             world_identity: sample.world_identity.clone(),
         });
+    }
+
+    /// Returns the facing of the newest movement sample written by the socket.
+    pub fn latest_written_facing(&self) -> Option<(u64, [f32; 2])> {
+        let sample = self.sent_history.back()?;
+        (sample.session_generation == self.session_generation)
+            .then_some((sample.tick, sample.facing))
+    }
+
+    /// Reports a validated placement aim through normal movement until the press finishes.
+    pub fn begin_placement_facing(&mut self, facing: [f32; 2], direction: [f32; 3]) -> bool {
+        if !self.accepts_block_interactions()
+            || !facing.into_iter().chain(direction).all(f32::is_finite)
+        {
+            return false;
+        }
+        let [pitch, yaw] = facing;
+        self.placement_facing = Some(PlacementFacing {
+            pitch,
+            yaw,
+            direction,
+            expires_at: self.next_tick.saturating_add(PLACEMENT_FACING_TICKS),
+        });
+        true
+    }
+
+    pub fn end_placement_facing(&mut self) {
+        self.placement_facing = None;
+    }
+
+    /// Whether the current placement still owns the bounded movement override.
+    pub fn placement_facing_active(&self) -> bool {
+        self.placement_facing
+            .is_some_and(|placement| self.next_tick < placement.expires_at)
     }
 
     /// Commits the oldest matching socket receipt and retires its release launch.
@@ -792,6 +827,7 @@ impl MovementTicker {
     fn reanchor_position_authority(&mut self, revoke_interactions: bool) {
         self.next_tick_flags = protocol::PlayerInputFlags::NONE;
         self.next_tick_rotation = None;
+        self.placement_facing = None;
         self.reanchor_epoch = self.reanchor_epoch.next();
         self.epoch_publisher.send_if_modified(|published| {
             if *published == self.reanchor_epoch {

@@ -164,6 +164,7 @@ fn ordered_fast_place_selects_a_carried_block_and_places_in_both_modes() {
             position: DESTINATION,
             name: "minecraft:stone".into(),
             states,
+            correct_aim: false,
         });
         super::super::tap(world, MouseButton::Right);
         // Resume through real selection and input maintenance, not just the request producer.
@@ -218,6 +219,7 @@ fn ordered_fast_place_checks_the_predicted_state_and_leaves_unrelated_clicks_alo
             .offer = Some(mod_host::CreativePlacementOffer {
             position,
             name: expected_name.into(),
+            correct_aim: false,
             states: if matching_state {
                 states
             } else {
@@ -322,6 +324,7 @@ fn ordered_fast_place_checks_the_predicted_state_when_requesting_a_creative_item
             position: DESTINATION,
             name: "minecraft:stone".into(),
             states,
+            correct_aim: false,
         });
         super::super::tap(world, MouseButton::Right);
         super::before_physics(&mut app);

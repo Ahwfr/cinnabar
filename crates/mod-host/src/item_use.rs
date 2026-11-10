@@ -46,6 +46,43 @@ impl cinnabar::extension::item_use::Host for State {
         name: String,
         states: String,
     ) -> Result<Result<(), String>> {
+        self.offer_placement(position, name, states, false)
+    }
+
+    fn offer_oriented_placement(
+        &mut self,
+        position: (i32, i32, i32),
+        name: String,
+        states: String,
+    ) -> Result<Result<(), String>> {
+        self.offer_placement(position, name, states, true)
+    }
+
+    /// Stages one use press edge while gameplay owns input and the use control is held.
+    fn pulse_use(&mut self) -> Result<Result<(), String>> {
+        self.item_use_policy.writes += 1;
+        if self.item_use_policy.writes > MAX_IMPORT_WRITES {
+            bail!("item-use import budget exhausted");
+        }
+        if !self.grants.item_use {
+            return Ok(Err("item-use capability denied".into()));
+        }
+        if self.snapshot.is_none() || !self.gameplay_facts.use_held {
+            return Ok(Err("use pulse requires a held current gameplay use".into()));
+        }
+        self.item_use_policy.pending_pulse = true;
+        Ok(Ok(()))
+    }
+}
+
+impl State {
+    fn offer_placement(
+        &mut self,
+        position: (i32, i32, i32),
+        name: String,
+        states: String,
+        correct_aim: bool,
+    ) -> Result<Result<(), String>> {
         self.item_use_policy.writes += 1;
         if self.item_use_policy.writes > MAX_IMPORT_WRITES {
             bail!("item-use import budget exhausted");
@@ -67,23 +104,8 @@ impl cinnabar::extension::item_use::Host for State {
             position,
             name,
             states,
+            correct_aim,
         });
-        Ok(Ok(()))
-    }
-
-    /// Stages one use press edge while gameplay owns input and the use control is held.
-    fn pulse_use(&mut self) -> Result<Result<(), String>> {
-        self.item_use_policy.writes += 1;
-        if self.item_use_policy.writes > MAX_IMPORT_WRITES {
-            bail!("item-use import budget exhausted");
-        }
-        if !self.grants.item_use {
-            return Ok(Err("item-use capability denied".into()));
-        }
-        if self.snapshot.is_none() || !self.gameplay_facts.use_held {
-            return Ok(Err("use pulse requires a held current gameplay use".into()));
-        }
-        self.item_use_policy.pending_pulse = true;
         Ok(Ok(()))
     }
 }

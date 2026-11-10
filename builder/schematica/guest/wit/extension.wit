@@ -930,6 +930,8 @@ interface item-use {
     /// Offers one expected block state for the next real Creative or Survival use press.
     /// Requires both item-use and inventory grants. Omission withdraws the offer.
     offer-creative-placement: func(position: tuple<s32, s32, s32>, name: string, states: string) -> result<_, string>;
+    /// Offers the same placement with opt-in correction of the server-facing aim.
+    offer-oriented-placement: func(position: tuple<s32, s32, s32>, name: string, states: string) -> result<_, string>;
 }
 
 /// Bounded local terrain reads. The queries a callback reads become its subscriptions, which the

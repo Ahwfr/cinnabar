@@ -119,8 +119,19 @@ struct SentPhysicsSample {
     session_generation: u64,
     tick: u64,
     position: [f32; 3],
+    facing: [f32; 2],
     world_identity: WorldCollisionIdentity,
 }
+
+#[derive(Clone, Copy, Debug)]
+struct PlacementFacing {
+    pitch: f32,
+    yaw: f32,
+    direction: [f32; 3],
+    expires_at: u64,
+}
+
+const PLACEMENT_FACING_TICKS: u64 = 4;
 
 #[derive(Debug, Clone, PartialEq)]
 struct PendingPhysicsSend {
@@ -180,6 +191,7 @@ pub struct MovementTicker {
     written_riptide_tick: Option<u64>,
     next_tick_flags: PlayerInputFlags,
     next_tick_rotation: Option<(f32, f32)>,
+    placement_facing: Option<PlacementFacing>,
     emote_ticks: u32,
     /// Recent tick-end states, the single source of build actions' pre-tick state.
     tick_ends: outbox::TickEnds,
@@ -236,6 +248,7 @@ impl MovementTicker {
             written_riptide_tick: None,
             next_tick_flags: PlayerInputFlags::NONE,
             next_tick_rotation: None,
+            placement_facing: None,
             emote_ticks: 0,
             tick_ends: outbox::TickEnds::default(),
             touch_interaction_model: protocol::PlayerInteractionModel::default(),
@@ -469,9 +482,15 @@ impl MovementTicker {
         } else {
             analogue_move_vector
         };
-        let (pitch, yaw) = self
-            .next_tick_rotation
-            .take()
+        let action_facing = self.next_tick_rotation.take();
+        let placement = self.placement_facing.filter(|placement| {
+            self.next_tick < placement.expires_at
+                && action_facing.is_none()
+                && sample.processed.vehicle.is_none()
+        });
+        let (pitch, yaw) = placement
+            .map(|placement| (placement.pitch, placement.yaw))
+            .or(action_facing)
             .unwrap_or((sample.pitch, sample.yaw));
         let snapshot = PlayerAuthInputSnapshot {
             tick: self.next_tick,
@@ -483,9 +502,13 @@ impl MovementTicker {
             raw_move_vector,
             pitch,
             yaw,
-            head_yaw: sample.head_yaw,
-            camera_orientation: sample.camera_orientation,
-            interact_rotation: interaction_rotation::from_facing(sample.pitch, sample.yaw),
+            head_yaw: placement.map_or(sample.head_yaw, |_| wire_head_yaw(yaw)),
+            camera_orientation: placement
+                .map_or(sample.camera_orientation, |placement| placement.direction),
+            interact_rotation: placement.map_or_else(
+                || interaction_rotation::from_facing(sample.pitch, sample.yaw),
+                |_| interaction_rotation::from_facing(pitch, yaw),
+            ),
             flags: input_flags(sample, self.previous_input)
                 | self.take_next_tick_flags()
                 | self.advance_emote_input(),

@@ -35,7 +35,7 @@ use std::{cell::RefCell, collections::BTreeMap, f32::consts::TAU};
 
 thread_local! {
     static RUNTIME: RefCell<(Runtime, Vec<&'static [u8]>, Options)> =
-        const { RefCell::new((Runtime::Start, Vec::new(), Options { textured: true, assist: false, fast_place: false, opacity: 65, hotkeys: BTreeMap::new() })) };
+        const { RefCell::new((Runtime::Start, Vec::new(), Options { textured: true, assist: false, fast_place: false, correct_aim: false, opacity: 65, hotkeys: BTreeMap::new() })) };
 }
 
 #[derive(Clone)]
@@ -43,6 +43,7 @@ struct Options {
     textured: bool,
     assist: bool,
     fast_place: bool,
+    correct_aim: bool,
     opacity: u8,
     hotkeys: BTreeMap<usize, String>,
 }
@@ -68,6 +69,7 @@ impl Options {
         let _ = settings::save(
             &serde_json::json!({
                 "textured":self.textured, "assist":self.assist, "fast_place": self.fast_place,
+                "correct_aim": self.correct_aim,
                 "opacity": self.opacity, "hotkeys": self.hotkeys,
             })
             .to_string(),
@@ -103,6 +105,9 @@ impl Guest for Schematica {
                 options.textured = value["textured"].as_bool().unwrap_or(options.textured);
                 options.assist = value["assist"].as_bool().unwrap_or(options.assist);
                 options.fast_place = value["fast_place"].as_bool().unwrap_or(options.fast_place);
+                options.correct_aim = value["correct_aim"]
+                    .as_bool()
+                    .unwrap_or(options.correct_aim);
                 if let Some(opacity) = value["opacity"].as_u64() {
                     options.opacity = opacity.clamp(25, 90) as u8;
                 }
@@ -486,11 +491,13 @@ impl Viewer {
             && let Some(block) = self.planned_block(pos)
         {
             let block = placement.transform_state(block);
-            if let Err(error) = item_use::offer_creative_placement(
-                (x, y, z),
-                &block.name,
-                &overlay::canonical(&block),
-            ) {
+            let states = overlay::canonical(&block);
+            let offer = if self.options.correct_aim {
+                item_use::offer_oriented_placement((x, y, z), &block.name, &states)
+            } else {
+                item_use::offer_creative_placement((x, y, z), &block.name, &states)
+            };
+            if let Err(error) = offer {
                 self.show_label(&format!("Fast Place | {error}"));
                 return;
             }
@@ -820,6 +827,11 @@ impl Viewer {
                 self.options.save();
                 return;
             }
+            "correct-aim" => {
+                self.options.correct_aim = !self.options.correct_aim;
+                self.options.save();
+                return;
+            }
             "unload" => {
                 if self.locked {
                     return;
@@ -1040,6 +1052,7 @@ mod tests {
                 textured: true,
                 assist: false,
                 fast_place: false,
+                correct_aim: false,
                 opacity: 65,
                 hotkeys: BTreeMap::new(),
             },
