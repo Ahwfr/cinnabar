@@ -258,6 +258,9 @@ struct Viewer {
     options: Options,
     material_page: usize,
     verifier_page: usize,
+    verifier_marker: Option<overlay::DrawPair>,
+    verifier_target: Option<[i32; 3]>,
+    verifier_marker_changed: bool,
     screen: Screen,
     library: Vec<String>,
     selected: Option<usize>,
@@ -298,6 +301,9 @@ impl Viewer {
             options,
             material_page: 0,
             verifier_page: 0,
+            verifier_marker: None,
+            verifier_target: None,
+            verifier_marker_changed: false,
             screen: Screen::Control,
             library,
             selected: None,
@@ -326,6 +332,9 @@ impl Viewer {
                 self.retired.clear();
                 self.placement = None;
                 self.locked = false;
+                self.verifier_marker = None;
+                self.verifier_target = None;
+                self.verifier_marker_changed = false;
                 self.world = Some(scope);
                 self.last_label.clear();
             }
@@ -425,6 +434,12 @@ impl Viewer {
             self.rebuild();
             self.dirty = false;
             return;
+        }
+        if std::mem::take(&mut self.verifier_marker_changed) {
+            self.clear_verifier_marker();
+            if let Some(cell) = self.verifier_target {
+                self.verifier_marker = overlay::highlight(self.world.unwrap().1, cell).ok();
+            }
         }
         if self.options.fast_place
             && let Some(placement) = self.placement
@@ -658,6 +673,21 @@ impl Viewer {
     }
 
     fn menu_action(&mut self, id: &str) {
+        if let Some(row) = id
+            .strip_prefix("verify-row-")
+            .and_then(|value| value.parse::<usize>().ok())
+        {
+            if row < menu::ROWS && !self.dirty {
+                let index = self.verifier_page * menu::ROWS + row;
+                let cell = self.mismatches().nth(index).map(|&(cell, _)| cell);
+                if let Some(cell) = cell {
+                    self.verifier_target = Some(cell);
+                    self.verifier_marker_changed = true;
+                    let _ = panel::close();
+                }
+            }
+            return;
+        }
         if let Some(index) = id
             .strip_prefix("select-")
             .and_then(|value| value.parse::<usize>().ok())
@@ -710,6 +740,11 @@ impl Viewer {
             "verify-next" => {
                 self.verifier_page = (self.verifier_page + 1)
                     .min(self.mismatch_count().div_ceil(menu::ROWS).saturating_sub(1));
+                return;
+            }
+            "verify-clear" => {
+                self.verifier_target = None;
+                self.verifier_marker_changed = true;
                 return;
             }
             "place" => {
@@ -851,6 +886,9 @@ impl Viewer {
     }
 
     fn rebuild(&mut self) {
+        self.clear_verifier_marker();
+        self.verifier_target = None;
+        self.verifier_marker_changed = false;
         self.retired
             .extend(self.tiles.drain(..).filter(Tile::has_draws));
         self.cursor = 0;
@@ -870,6 +908,7 @@ impl Viewer {
     }
 
     fn release_for_switch(&mut self) -> bool {
+        self.clear_verifier_marker();
         self.retired
             .extend(self.tiles.drain(..).filter(Tile::has_draws));
         self.clear_retired();
@@ -885,6 +924,16 @@ impl Viewer {
 
     fn mismatch_count(&self) -> usize {
         self.tiles.iter().map(Tile::mismatch_count).sum()
+    }
+
+    fn mismatches(&self) -> impl Iterator<Item = &([i32; 3], schematica_core::CellStatus)> {
+        self.tiles.iter().flat_map(|tile| &tile.mismatches)
+    }
+
+    fn clear_verifier_marker(&mut self) {
+        if let Some(marker) = self.verifier_marker.take() {
+            marker.remove();
+        }
     }
 
     fn publish_label(&mut self) {

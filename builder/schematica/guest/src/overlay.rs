@@ -100,16 +100,32 @@ pub struct Tile {
     sample: Option<terrain::Region>,
 }
 
-struct DrawPair {
+pub(super) struct DrawPair {
     geometry: draw::Handle,
     instance: draw::Handle,
 }
 
 impl DrawPair {
-    fn remove(self) {
+    pub(super) fn remove(self) {
         let _ = draw::remove(self.instance);
         let _ = draw::remove(self.geometry);
     }
+}
+
+pub(super) fn highlight(dimension: i32, cell: [i32; 3]) -> Result<DrawPair, draw::DrawError> {
+    let mut mesh = draw::Mesh {
+        vertices: Vec::new(),
+        indices: Vec::new(),
+    };
+    add_box(&mut mesh, [0; 3], (0.20, 0.96, 0.81, 0.42));
+    create(
+        draw::GeometrySpec::Triangles(mesh),
+        draw::BlockAnchor {
+            dimension,
+            position: cell.into(),
+        },
+        1.,
+    )
 }
 
 impl Tile {

@@ -247,11 +247,7 @@ fn verifier(viewer: &Viewer, out: &mut Map<String, Value>) {
             total.div_ceil(ROWS).max(1)
         )),
     );
-    let mut mismatches = viewer
-        .tiles
-        .iter()
-        .flat_map(|tile| &tile.mismatches)
-        .skip(viewer.verifier_page * ROWS);
+    let mut mismatches = viewer.mismatches().skip(viewer.verifier_page * ROWS);
     for row in 0..ROWS {
         let (coordinates, kind) = match mismatches.next().filter(|_| !viewer.dirty) {
             Some(([x, y, z], status)) => {
@@ -269,9 +265,28 @@ fn verifier(viewer: &Viewer, out: &mut Map<String, Value>) {
         };
         out.insert(format!("#pos{row}"), json!(coordinates));
         out.insert(format!("#kind{row}"), json!(kind));
+        out.insert(format!("#verify-visible{row}"), json!(!kind.is_empty()));
     }
 }
 
 fn short(text: &str, chars: usize) -> String {
     text.chars().take(chars).collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::collections::HashSet;
+
+    #[test]
+    fn every_panel_has_unique_control_ids() {
+        for template in [CONTROL, LOAD, SETTINGS, MATERIALS, MAIN, VERIFIER, HOTKEYS] {
+            let panel: Value = serde_json::from_str(template).unwrap();
+            let mut ids = HashSet::new();
+            for control in panel["controls"].as_array().unwrap() {
+                let id = control["id"].as_str().unwrap();
+                assert!(ids.insert(id), "duplicate panel control {id}");
+            }
+        }
+    }
 }

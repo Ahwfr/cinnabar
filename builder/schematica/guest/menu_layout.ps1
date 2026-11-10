@@ -57,7 +57,10 @@ function Add-Header($active) {
     Add-Button 'main' 'Schematica' 16 7 104 21 $activeFill
     Add-Label '#blueprint' 130 14 250 $ink 'right'
     $i=0
-    foreach($tab in @(@('load','library','Library'),@('control','back','Controls'),@('materials','materials','Materials'),@('settings','settings','Settings'))){
+    $tabs = if ($active -ne 'main') {
+        @(@('load','library','Library'),@('control','back','Controls'),@('materials','materials','Materials'),@('settings','settings','Settings'))
+    }
+    foreach($tab in $tabs){
         $isActive=$active -eq $tab[0]
         $tabFill=if($isActive){$activeFill}else{$buttonFill}
         $id=if($isActive){''}else{$tab[1]}
@@ -165,10 +168,11 @@ foreach($screen in @('main','load','control','materials','settings','verifier','
             for($i=0;$i -lt 7;$i++){
                 $y=104+17*$i
                 if($i%2 -eq 0){ Add-Node (New-Rect 16 ($y-2) 364 16 $surface 2) }
-                Add-Label "#pos$i" 24 $y 188
+                Add-Button "verify-row-$i" "#pos$i" 24 ($y-3) 182 16 $buttonFill $false '' "#verify-visible$i"
                 Add-Label "#kind$i" 224 $y 150 $accent
             }
             Add-Label '#scan' 16 229 364 $muted
+            Add-Button 'verify-clear' 'Clear marker' 16 252 118 22
             Add-Button 'verify-previous' '<' 156 252 28 22
             Add-Label '#page' 187 258 56 $muted 'center'
             Add-Button 'verify-next' '>' 246 252 28 22
