@@ -143,6 +143,51 @@ fn boundary_fixture() -> (App, client_session::CapturedPackets) {
 }
 
 #[test]
+fn ordered_fast_place_checks_the_predicted_state() {
+    for matching in [true, false] {
+        let (mut app, mut captured) = boundary_fixture();
+        let world = app.world_mut();
+        world
+            .resource_mut::<client_state::PlayerRuntime>()
+            .facts
+            .publish_player_game_mode(PlayerGameMode::Creative);
+        let stone = block_id("minecraft:stone");
+        let states = world
+            .resource::<PhysicsCollisionRegistries>()
+            .block_canonical_state(assets::NetworkIdMode::Sequential, stone)
+            .unwrap()
+            .to_owned();
+        world.init_resource::<crate::block_use::creative::CreativePlacement>();
+        world
+            .resource_mut::<crate::block_use::creative::CreativePlacement>()
+            .offer = Some(mod_host::CreativePlacementOffer {
+            position: DESTINATION,
+            name: "minecraft:stone".into(),
+            states: if matching {
+                states
+            } else {
+                r#"{"wrong":true}"#.into()
+            },
+        });
+        super::super::next_slot(world);
+        super::super::tap(world, MouseButton::Right);
+        super::before_physics(&mut app);
+        assert_eq!(
+            super::super::super::transaction_targets(&mut captured),
+            if matching { vec![CLICKED] } else { vec![] },
+        );
+        assert_eq!(
+            cell(app.world(), DESTINATION).unwrap(),
+            if matching {
+                stone
+            } else {
+                block_id("minecraft:air")
+            },
+        );
+    }
+}
+
+#[test]
 fn ordered_placement_keeps_its_local_swing_when_authority_is_published() {
     let (mut app, mut captured) = boundary_fixture();
     super::super::next_slot(app.world_mut());

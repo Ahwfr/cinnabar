@@ -19,9 +19,9 @@ jobs:
     env:
       CARGO_BUILD_BUILD_DIR: "{workspace-root}/target"
       CARGO_INCREMENTAL: "0"
-      CARGO_PROFILE_RELEASE_DEBUG: line-tables-only
-      CARGO_PROFILE_RELEASE_SPLIT_DEBUGINFO: packed
-      CARGO_PROFILE_RELEASE_STRIP: debuginfo
+      CARGO_PROFILE_RELEASE_CODEGEN_UNITS: "16"
+      CARGO_PROFILE_RELEASE_LTO: "false"
+      CARGO_PROFILE_RELEASE_DEBUG: "0"
     steps:
       - uses: actions/checkout@v6
         with:
@@ -29,7 +29,10 @@ jobs:
       - uses: actions/setup-go@v6
         with:
           go-version: stable
-          cache: false
+          cache-dependency-path: |
+            go.work.sum
+            core/go.sum
+            tools/localserver/go.sum
       - name: Set up Rust and Make
         shell: pwsh
         run: |
@@ -39,6 +42,26 @@ jobs:
             choco install make --no-progress -y
             if ($LASTEXITCODE) { exit $LASTEXITCODE }
           }
+      - name: Cache Rust dependencies and compiler outputs
+        uses: actions/cache@v5
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+            target/release/.fingerprint
+            target/release/build
+            target/release/deps/*.rlib
+            target/release/deps/*.rmeta
+            target/release/deps/*.dll
+          key: builder-windows-parallel-v1-${{ hashFiles('rust-toolchain.toml', 'Cargo.lock', 'builder/schematica/Cargo.lock') }}-${{ github.sha }}
+          restore-keys: |
+            builder-windows-parallel-v1-${{ hashFiles('rust-toolchain.toml', 'Cargo.lock', 'builder/schematica/Cargo.lock') }}-
+      - name: Verify Creative inventory and Fast Place right-click
+        shell: bash
+        run: |
+          cargo test --locked --release --manifest-path crates/inventory/Cargo.toml --lib gameplay_creative_take_keeps_the_hotbar_unconfirmed_until_the_server_accepts
+          cargo test --locked --release -p cinnabar --no-default-features --lib ordered_fast_place_checks_the_predicted_state
       - name: Build upstream runtime binaries
         shell: bash
         run: make package-binaries
