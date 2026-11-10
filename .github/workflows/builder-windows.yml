@@ -9,7 +9,8 @@ permissions:
 
 concurrency:
   group: builder-windows-${{ github.ref }}
-  cancel-in-progress: true
+  # Let the active build finish and save the compiler state for the queued build.
+  cancel-in-progress: false
 
 jobs:
   binaries:
@@ -18,7 +19,7 @@ jobs:
     timeout-minutes: 120
     env:
       CARGO_BUILD_BUILD_DIR: "{workspace-root}/target"
-      CARGO_INCREMENTAL: "0"
+      CARGO_PROFILE_RELEASE_INCREMENTAL: "true"
       CARGO_PROFILE_RELEASE_CODEGEN_UNITS: "16"
       CARGO_PROFILE_RELEASE_LTO: "false"
       CARGO_PROFILE_RELEASE_DEBUG: "0"
@@ -42,8 +43,29 @@ jobs:
             choco install make --no-progress -y
             if ($LASTEXITCODE) { exit $LASTEXITCODE }
           }
-      - name: Cache Rust dependencies and compiler outputs
+      - name: Cache Rust dependencies and incremental build state
+        id: rust-cache
         uses: actions/cache@v5
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/registry/src/*/*-sys-*
+            ~/.cargo/git
+            target/.ci-inputs.json
+            target/release/.fingerprint
+            target/release/build
+            target/release/deps/*.rlib
+            target/release/deps/*.rmeta
+            target/release/deps/*.dll
+            target/release/incremental
+            target/builder-importer
+          key: builder-windows-incremental-v1-${{ hashFiles('rust-toolchain.toml', '.github/workflows/builder-windows.yml') }}-${{ github.sha }}
+          restore-keys: |
+            builder-windows-incremental-v1-${{ hashFiles('rust-toolchain.toml', '.github/workflows/builder-windows.yml') }}-
+      - name: Seed the first incremental build from the previous dependency cache
+        if: steps.rust-cache.outputs.cache-hit == ''
+        uses: actions/cache/restore@v5
         with:
           path: |
             ~/.cargo/registry/index
@@ -57,8 +79,13 @@ jobs:
           key: builder-windows-parallel-v1-${{ hashFiles('rust-toolchain.toml', 'Cargo.lock', 'builder/schematica/Cargo.lock') }}-${{ github.sha }}
           restore-keys: |
             builder-windows-parallel-v1-${{ hashFiles('rust-toolchain.toml', 'Cargo.lock', 'builder/schematica/Cargo.lock') }}-
+      - name: Restore unchanged source timestamps
+        shell: pwsh
+        run: python .github/actions/build-cache/cache.py restore-inputs
       - name: Verify Creative inventory and Fast Place right-click
         shell: bash
+        env:
+          CINNABAR_BUILD_COMMIT: ${{ github.sha }}
         run: |
           cargo test --locked --release --manifest-path crates/inventory/Cargo.toml --lib gameplay_creative_take_keeps_the_hotbar_unconfirmed_until_the_server_accepts
           cargo test --locked --release -p cinnabar --no-default-features --lib ordered_fast_place_checks_the_predicted_state
@@ -67,7 +94,12 @@ jobs:
         run: make package-binaries
       - name: Build the schematic importer
         shell: pwsh
+        env:
+          CARGO_BUILD_BUILD_DIR: ${{ github.workspace }}/target/builder-importer
         run: ./builder/Build-Builder.ps1 -ImporterOnly
+      - name: Verify the cached build inputs
+        shell: pwsh
+        run: python .github/actions/build-cache/cache.py verify-inputs
       - name: Stage the checkout binaries
         shell: pwsh
         run: |

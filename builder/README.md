@@ -21,6 +21,8 @@ On the fork's [Actions page](https://github.com/Ahwfr/cinnabar/actions), open a 
 
 The artifact contains the binaries and notices. The checkout needs its locally generated game assets. If you haven't prepared them yet, run `target/release/assetc.exe prepare --accept-eula` from the checkout root once you accept the Minecraft EULA. Then open **Play Builder.cmd**.
 
+Builder Windows saves Cargo's compiled dependencies and incremental compiler data between runs. A feature or fix can reuse work from the previous successful build. Cargo checks which inputs changed and recompiles what the new executable needs. The first run with a new cache or Rust toolchain has more work to do. The workflow still runs the Fast Place tests and publishes a complete ZIP.
+
 ## Import a schematic
 
 Close Builder and open **Import Schematics.cmd** in the same folder. Choose up to eight `.schematic`, `.schem`, `.litematic` or `.mcstructure` files. The importer builds one library directly in this Builder profile. It leaves your input files in place and keeps the previous library under `.local/builder-user/library-backups`. If conversion fails, the previous library remains installed.
