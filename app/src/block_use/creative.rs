@@ -60,8 +60,11 @@ pub(super) fn try_start(
         return false;
     };
     let Some(offer) = policy.offer.clone() else {
+        bevy::log::debug!(support = ?observed.target.position, face = observed.target.face, "Fast Place: native hit has no schematic offer");
         return false;
     };
+    bevy::log::debug!(block = %offer.name, states = %offer.states, ghost = ?offer.position,
+        support = ?observed.target.position, face = observed.target.face, "Fast Place: examining use press");
     let Some(game_mode @ (PlayerGameMode::Creative | PlayerGameMode::Survival)) =
         player.facts.player_game_mode()
     else {
@@ -76,6 +79,7 @@ pub(super) fn try_start(
     .observe(|world| world.is_air(offer.position).unwrap_or(false))
     .is_ok_and(|observed| observed.value)
     {
+        bevy::log::debug!(ghost = ?offer.position, "Fast Place: destination is occupied or not loaded");
         return false;
     }
     let ledger = player.inventory.ledger();
@@ -88,6 +92,10 @@ pub(super) fn try_start(
     };
     let selected = observed.selection.slot;
     if ledger.backing_stack(selected).and_then(quality).is_some() {
+        bevy::log::debug!(
+            slot = selected,
+            "Fast Place: planned block is held, leaving the click to normal placement"
+        );
         policy.pending = None;
         policy.claimed = false;
         return false;
@@ -178,7 +186,8 @@ pub(super) fn try_start(
         (slot, item, Some(request))
     };
     policy.claimed = true;
-    bevy::log::info!(block = %offer.name, slot, ?request, ?game_mode, "Fast Place waiting for inventory and selection");
+    bevy::log::info!(block = %offer.name, slot, ?request, ?game_mode, item_network_id = key.0,
+        metadata = key.1, item_block_runtime_id = key.2, "Fast Place waiting for inventory and selection");
     policy.pending = Some(Pending {
         game_mode,
         offer,
@@ -232,6 +241,7 @@ pub(super) fn resume(
         return policy.claimed;
     };
     if policy.offer.as_ref() != Some(&pending.offer) {
+        bevy::log::debug!(ghost = ?pending.offer.position, current = ?policy.offer, "Fast Place: schematic offer changed before placement");
         policy.claimed = false;
         return false;
     }
@@ -266,6 +276,7 @@ pub(super) fn resume(
         return true;
     }
     if !pending.selecting {
+        bevy::log::debug!(slot = pending.slot, request = ?pending.request, "Fast Place: backing stack ready, queuing equipment selection");
         player
             .inventory
             .queue_local_hotbar_selection(pending.slot, Some(pending.game_mode));
@@ -300,6 +311,10 @@ pub(super) fn resume(
         ItemUseTrigger::PlayerInput,
         &state,
     ) else {
+        bevy::log::debug!(
+            slot = pending.slot,
+            "Fast Place: equipment selected but native support could not be observed"
+        );
         return true;
     };
     if support(&observed) != pending.support {
@@ -318,6 +333,10 @@ pub(super) fn resume(
         *context.view,
     );
     build.expected = Some(pending.offer);
+    bevy::log::debug!(
+        slot = pending.slot,
+        "Fast Place: equipment admitted, resuming native placement"
+    );
     build::advance(
         player, context, runtime, item_use, swings, movement, &mut build,
     );

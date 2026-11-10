@@ -35,6 +35,7 @@ pub(crate) fn press(
             return false;
         }
         let Some(selection) = verified_use_selection(&player, &context.ui) else {
+            bevy::log::debug!("Fast Place trace: use press has no admitted hand selection");
             return false;
         };
         runtime.selection_changed(&selection);
@@ -78,6 +79,7 @@ pub(crate) fn press(
             ItemUseTrigger::PlayerInput,
             &state,
         ) else {
+            bevy::log::debug!("Fast Place trace: use press has no native support hit");
             creative::clear(context.creative.as_deref_mut());
             runtime.record(
                 ItemUseTrigger::PlayerInput,

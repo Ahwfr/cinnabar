@@ -13,6 +13,25 @@ fn placement_cell_is_on_the_hit_face_and_requires_input_ownership() {
     assert_eq!(cells, [Some([4, 2, 7]), None]);
 }
 
+#[test]
+fn placement_cell_survives_an_unannounced_hotbar_change() {
+    let (mut world, _captured) = crate::block_use::published_tests::fixture();
+    bind_world_clock(&mut world);
+    {
+        let mut player = world.resource_mut::<client_state::PlayerRuntime>();
+        let mode = player.facts.player_game_mode();
+        player.inventory.queue_local_hotbar_selection(1, mode);
+        assert!(player.inventory.pending_hotbar_selection().is_some());
+        assert!(client_interaction::mining::hand_interaction_selection(&player).is_none());
+    }
+    let cell = world
+        .run_system_cached(|context: GameplayContext| {
+            context.facts(true, None, None, None).placement_cell
+        })
+        .unwrap();
+    assert_eq!(cell, Some([4, 2, 7]));
+}
+
 fn bind_world_clock(world: &mut World) {
     let mut clock = client_presentation::environment::WorldClock::default();
     let mut weather = client_presentation::environment::WeatherState::default();

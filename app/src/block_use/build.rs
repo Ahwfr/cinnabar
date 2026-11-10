@@ -147,22 +147,29 @@ fn prepare(
         if let Some(expected) = &attempt.expected {
             let mode = stream.network_id_mode();
             let Some(placement) = placement.as_ref() else {
-                bevy::log::info!(block = %expected.name, "Fast Place could not predict this placement");
+                bevy::log::info!(block = %expected.name, states = %expected.states,
+                    ghost = ?expected.position, support = ?observed.target.position,
+                    face = observed.target.face, click = ?observed.target.relative_hit,
+                    "Fast Place could not predict this placement");
                 return None;
             };
+            let actual_name = context.collisions.block_identifier(mode, placement.block);
+            let actual_states = context.collisions.block_canonical_state(mode, placement.block);
             if !matches!(game_mode, Some(PlayerGameMode::Creative | PlayerGameMode::Survival))
                 || observed.selection.item.count() == 0
                 || !world.is_air(expected.position).ok()?
                 || placement.position != expected.position
                 || !placement.additional.is_empty()
-                || context.collisions.block_identifier(mode, placement.block)
-                    != Some(expected.name.as_str())
-                || context
-                    .collisions
-                    .block_canonical_state(mode, placement.block)
-                    != Some(expected.states.as_str())
+                || actual_name != Some(expected.name.as_str())
+                || actual_states != Some(expected.states.as_str())
             {
-                bevy::log::info!(block = %expected.name, ghost = ?expected.position, "Fast Place predicted a different block or state");
+                let (yaw, pitch, _) = attempt.view.rotation().to_euler(bevy::math::EulerRot::YXZ);
+                bevy::log::info!(block = %expected.name, states = %expected.states, ghost = ?expected.position,
+                    actual_name, actual_states, destination = ?placement.position,
+                    additional_cells = placement.additional.len(), face = observed.target.face,
+                    click = ?observed.target.relative_hit,
+                    yaw = gameplay::movement::wire_yaw(180.0 - yaw.to_degrees()), pitch = -pitch.to_degrees(),
+                    "Fast Place predicted a different block or state");
                 return None;
             }
         }
@@ -385,8 +392,36 @@ pub(crate) fn advance(
         |tick| swings.try_swing_before_tick(tick, plan.swing_effects),
         tick,
     );
+    if let Some(expected) = &attempt.expected {
+        for (index, packet) in packets.iter().enumerate() {
+            bevy::log::debug!(index, packet = ?packet.kind(), tick, "Fast Place: outbound batch order");
+        }
+        let (yaw, pitch, _) = attempt.view.rotation().to_euler(bevy::math::EulerRot::YXZ);
+        let placed_runtime_id = plan
+            .predicted
+            .as_ref()
+            .and_then(|cells| {
+                cells
+                    .iter()
+                    .find(|cell| cell.0 == expected.position && cell.1 == 0)
+            })
+            .and_then(|cell| stream.block_network_id(cell.2));
+        bevy::log::debug!(tick, destination = ?expected.position, block = %expected.name,
+            states = %expected.states, ?placed_runtime_id, support = ?observed.target.position,
+            face = observed.target.face, click = ?observed.target.relative_hit,
+            slot = observed.selection.slot, item = observed.selection.item.network_id(),
+            count = observed.selection.item.count(), player_position = ?state.position,
+            support_runtime_id = plan.block_network_id, consumes_item = plan.change.is_some(),
+            yaw = gameplay::movement::wire_yaw(180.0 - yaw.to_degrees()), pitch = -pitch.to_degrees(),
+            "Fast Place: submitting native placement batch");
+    }
     let result = (!packets.is_empty()).then(|| context.network.send_inventory_packets(packets));
     let sent = matches!(result, Some(Ok(())));
+    if let Some(expected) = &attempt.expected {
+        bevy::log::debug!(tick, destination = ?expected.position, sent,
+            queue_full = matches!(result, Some(Err(client_session::BatchSendError::Full))),
+            "Fast Place: placement batch admission");
+    }
     if sent {
         runtime.intention.record(
             trigger == ItemUseTrigger::SimulationTick,

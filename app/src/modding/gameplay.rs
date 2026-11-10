@@ -456,14 +456,15 @@ impl GameplayContext<'_> {
             return None;
         }
         let collisions = self.collisions.as_ref()?;
-        let selection = client_interaction::mining::hand_interaction_selection(player)?;
         let mode = player.facts.player_game_mode();
-        let pick = crate::interaction_authority::pick_context(
-            stream,
-            collisions,
-            mode,
-            Some(selection.item.block_runtime_id()),
-        );
+        // The geometric target survives an in-flight inventory swap or hotbar announcement.
+        // Only the eventual gameplay transaction requires an admitted hand selection.
+        let selected_block = player
+            .selected_hotbar_slot()
+            .and_then(|slot| player.inventory.ledger().backing_stack(slot))
+            .map(|stack| stack.block_runtime_id);
+        let pick =
+            crate::interaction_authority::pick_context(stream, collisions, mode, selected_block);
         let overlay_ids = stream.authority().decode_ids(stream.current_dimension());
         let world = sim::PaletteWorld::new(
             stream.collision_store(),

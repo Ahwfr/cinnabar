@@ -198,6 +198,15 @@ impl WorldStream {
                     }
                 }
                 CommitStep::BlockUpdates { sequence, events } => {
+                    if tracing::enabled!(target: "cinnabar::placement_updates", tracing::Level::DEBUG)
+                    {
+                        for event in &events {
+                            tracing::debug!(target: "cinnabar::placement_updates", sequence,
+                                position = ?event.position, dimension = event.dimension,
+                                layer = event.layer, network_id = event.network_id,
+                                "server block update received");
+                        }
+                    }
                     let batches = self.snapshot_block_mutation_batches(events);
                     if batches.is_empty() {
                         self.finish_ordered_commit(sequence);
