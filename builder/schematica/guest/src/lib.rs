@@ -32,6 +32,22 @@ struct Options {
 }
 
 impl Options {
+    fn menu_hint(&self, title: &str) -> String {
+        let menu = hotkeys::for_action(&self.hotkeys, hotkeys::Action::Main);
+        let settings = hotkeys::for_action(&self.hotkeys, hotkeys::Action::Config);
+        let menu = if menu.is_empty() {
+            "Alt+J Library".into()
+        } else {
+            format!("{menu} Menu")
+        };
+        let settings = if settings.is_empty() {
+            "Alt+K"
+        } else {
+            settings
+        };
+        format!("{title} | {menu} | {settings} Settings")
+    }
+
     fn save(&self) {
         let _ = settings::save(
             &serde_json::json!({
@@ -83,7 +99,7 @@ impl Guest for Schematica {
                 }
             });
         }
-        label("Schematica | Alt+J library | Alt+I controls | Alt+K settings");
+        RUNTIME.with(|runtime| label(&runtime.borrow().2.menu_hint("Schematica")));
     }
 
     fn frame() {
@@ -208,7 +224,7 @@ impl Guest for Schematica {
                         options.clone(),
                         true,
                     ));
-                    label("Schematica | Alt+J library | Alt+I controls | Alt+K settings");
+                    label(&options.menu_hint("Schematica"));
                 }
                 Runtime::Invalid => {}
                 Runtime::Start => unreachable!(),
@@ -978,10 +994,7 @@ impl Viewer {
                 self.schematic.name, p.origin, layer, needed, wrong, extra, unknown, note
             )
         } else {
-            format!(
-                "{} | Alt+J library | Alt+I controls | Alt+K settings",
-                self.schematic.name
-            )
+            self.options.menu_hint(&self.schematic.name)
         };
         self.show_label(&message);
     }

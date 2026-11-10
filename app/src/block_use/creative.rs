@@ -146,13 +146,15 @@ pub(super) fn press(
             );
             return Press::Consumed;
         };
-        let Ok(request) = player
-            .inventory
-            .ledger_mut()
+        let request = match player
+            .inventory_commands()
             .begin_windowless_creative_hotbar_take(id, slot)
-        else {
-            bevy::log::info!(block = %offer.name, slot, "Fast Place inventory request was refused locally");
-            return Press::Consumed;
+        {
+            Ok(request) => request,
+            Err(error) => {
+                bevy::log::info!(block = %offer.name, slot, %error, "Fast Place inventory request was refused locally");
+                return Press::Consumed;
+            }
         };
         (slot, item, Some(request))
     };

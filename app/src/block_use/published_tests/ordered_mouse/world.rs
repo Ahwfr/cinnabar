@@ -196,6 +196,83 @@ fn ordered_fast_place_checks_the_predicted_state() {
 }
 
 #[test]
+fn ordered_fast_place_checks_the_predicted_state_when_requesting_a_creative_item() {
+    let (mut app, mut captured) = boundary_fixture();
+    let world = app.world_mut();
+    let stone = block_id("minecraft:stone");
+    let states = world
+        .resource::<PhysicsCollisionRegistries>()
+        .block_canonical_state(assets::NetworkIdMode::Sequential, stone)
+        .unwrap()
+        .to_owned();
+    let entries = protocol::vanilla_item_registry();
+    let network_id = entries
+        .iter()
+        .find(|entry| entry.identifier.as_ref() == "minecraft:stone")
+        .unwrap()
+        .network_id;
+    {
+        let mut player = world.resource_mut::<client_state::PlayerRuntime>();
+        let ledger = player.inventory_commands();
+        ledger.apply(&InventoryEvent::Authority(
+            protocol::InventoryAuthority::Server,
+        ));
+        ledger.apply_registry(&protocol::ItemRegistryEvent { entries });
+        ledger.apply(&InventoryEvent::Content(protocol::InventoryContentEvent {
+            container: protocol::ContainerIdentity::window(protocol::PLAYER_INVENTORY_WINDOW_ID),
+            slots: vec![
+                protocol::NetworkItemStack::empty();
+                inventory::inventory_ledger::PLAYER_INVENTORY_SLOT_COUNT
+            ]
+            .into(),
+            storage_item: protocol::NetworkItemStack::empty(),
+        }));
+        ledger.apply(&InventoryEvent::Creative(protocol::CreativeContentEvent {
+            groups: [].into(),
+            items: [protocol::CreativeItem {
+                creative_network_id: 44,
+                stack: protocol::NetworkItemStack {
+                    network_id,
+                    count: 1,
+                    block_runtime_id: i32::from_ne_bytes(stone.to_ne_bytes()),
+                    ..protocol::NetworkItemStack::empty()
+                },
+                group: 0,
+            }]
+            .into(),
+            skipped: 0,
+        }));
+        // The ledger still has the previous mode's permissions until a command refreshes them.
+        player
+            .facts
+            .publish_player_game_mode(PlayerGameMode::Creative);
+        assert_eq!(player.facts.instabuild(), Some(true));
+    }
+    world.init_resource::<crate::block_use::creative::CreativePlacement>();
+    world
+        .resource_mut::<crate::block_use::creative::CreativePlacement>()
+        .offer = Some(mod_host::CreativePlacementOffer {
+        position: DESTINATION,
+        name: "minecraft:stone".into(),
+        states,
+    });
+    super::super::tap(world, MouseButton::Right);
+    super::before_physics(&mut app);
+
+    let player = app.world().resource::<client_state::PlayerRuntime>();
+    let ledger = player.inventory.ledger();
+    assert!(!ledger.personal_inventory_desired_open());
+    assert_eq!(ledger.pending_request_count(), 1);
+    assert!(ledger.backing_stack(0).is_none());
+    assert_eq!(ledger.displayed_stack(0).unwrap().network_id, network_id);
+    assert!(super::super::super::transaction_targets(&mut captured).is_empty());
+    assert_eq!(
+        cell(app.world(), DESTINATION).unwrap(),
+        block_id("minecraft:air")
+    );
+}
+
+#[test]
 fn ordered_placement_keeps_its_local_swing_when_authority_is_published() {
     let (mut app, mut captured) = boundary_fixture();
     super::super::next_slot(app.world_mut());
