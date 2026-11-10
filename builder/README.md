@@ -13,7 +13,7 @@ Set-Location cinnabar-builder
 .\builder\Start-Builder.ps1 -Check
 ```
 
-Open **Play Builder.cmd** in the `builder` folder to start the client. Its account, worlds, settings and mods live under `.local/builder-user` in this checkout.
+You can also open **Build Builder.cmd** in the `builder` folder. When the build finishes, open **Play Builder.cmd** to start the client. Its account, worlds, settings and mods live under `.local/builder-user` in this checkout. The shortcuts use Windows PowerShell with a process-only `RemoteSigned` policy for the scripts checked out by Git.
 
 ## Import a schematic
 
@@ -35,7 +35,7 @@ Target info identifies the planned material under the crosshair. Creative Easy P
 Wait for upstream Cinnabar to add support for the version. From a clean `builder-features` checkout run:
 
 ```powershell
-.\builder\Update-Builder.ps1
+& '.\builder\Update Builder.cmd'
 ```
 
 The script fetches upstream `dev` and replays the Builder commits in a sibling worktree ending in `-update`. The main checkout, build and profile stay available. If Git stops on a conflict, resolve it in the update worktree and run `git rebase --continue`, or run `git rebase --abort` there to abandon the attempt. Git may need you to deepen a shallow clone before it can find a shared base.
@@ -43,8 +43,8 @@ The script fetches upstream `dev` and replays the Builder commits in a sibling w
 From the update worktree run `./builder/Build-Builder.ps1` and launch it with `./builder/Start-Builder.ps1`. The launcher's `-Check` switch shows the Bedrock version from Cinnabar's manifest. Use the isolated test profile to import the demo and a Java schematic, then check textured preview, layers, and representative mapped block states. Check that the client connects to the intended Bedrock version. Then return to the main checkout:
 
 ```powershell
-.\builder\Update-Builder.ps1 -Accept
-.\builder\Build-Builder.ps1
+& '.\builder\Update Builder.cmd' -Accept
+& '.\builder\Build Builder.cmd'
 ```
 
 The script advances the branch and base together and saves the previous commit on a timestamped `builder-backup-*` branch. The main launcher checks the build's commit before starting. After the new build works, remove the clean candidate using `git worktree remove <update-worktree-path>` and `git branch -d builder-update` to prepare for the next update. If you want to retain the candidate build and its separate profile, detach the candidate and use `git worktree move` to archive it under a different path before deleting the trial branch.
