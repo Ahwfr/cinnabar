@@ -1,0 +1,15 @@
+[package]
+name = "schematica-guest"
+version = "0.2.0"
+edition = "2024"
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+schematica-core = { path = "../core" }
+wit-bindgen = "=0.57.1"
+serde_json = "=1.0.150"
+
+

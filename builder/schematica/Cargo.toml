@@ -1,0 +1,8 @@
+[workspace]
+members = ["core", "guest", "builder"]
+default-members = ["core", "builder"]
+resolver = "3"
+
+[profile.release]
+opt-level = 3
+lto = "thin"

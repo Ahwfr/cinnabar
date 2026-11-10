@@ -1,0 +1,11 @@
+[package]
+name = "schematica-core"
+version = "0.1.0"
+edition = "2021"
+description = "Pure-logic core for a Schematica-style schematic overlay on Bedrock (Cinnabar WASM mod)"
+license = "MIT"
+
+# Deliberately dependency-free: this crate compiles to wasm32-unknown-unknown
+# and is unit-tested natively. Parsing/translation of Java formats is a
+# host-side step (see PLAN.md), so no NBT/zip/serde code ships in the mod.
+[dependencies]
