@@ -18,6 +18,7 @@ jobs:
     runs-on: windows-2025
     timeout-minutes: 120
     env:
+      HEADLESS_TEST: ${{ contains(github.event.head_commit.message, '[headless test]') }}
       CARGO_BUILD_BUILD_DIR: "{workspace-root}/target"
       CARGO_PROFILE_RELEASE_INCREMENTAL: "true"
       CARGO_PROFILE_RELEASE_CODEGEN_UNITS: "16"
@@ -28,6 +29,7 @@ jobs:
         with:
           persist-credentials: false
       - uses: actions/setup-go@v6
+        if: env.HEADLESS_TEST != 'true'
         with:
           go-version: stable
           cache-dependency-path: |
@@ -63,6 +65,7 @@ jobs:
           key: builder-windows-incremental-v1-${{ hashFiles('rust-toolchain.toml', '.github/workflows/builder-windows.yml') }}-${{ github.sha }}
           restore-keys: |
             builder-windows-incremental-v1-${{ hashFiles('rust-toolchain.toml', '.github/workflows/builder-windows.yml') }}-
+            builder-windows-incremental-v1-72e7ad6ea8c0e3ca8b38b1d2f7d16f4edf5319251f539f4aa444f60f6a6bd223-
             builder-windows-incremental-v1-779b123bffca1cfcf7c502ee408aa5315bd12b973206256d5e6aff1888318395-
       - name: Seed the first incremental build from the previous dependency cache
         if: steps.rust-cache.outputs.cache-hit == ''
@@ -84,8 +87,15 @@ jobs:
         shell: pwsh
         run: python .github/actions/build-cache/cache.py restore-inputs
       - name: Build upstream runtime binaries
+        if: env.HEADLESS_TEST != 'true'
         shell: bash
         run: make package-binaries
+      - name: Build the headless test client and controller
+        if: env.HEADLESS_TEST == 'true'
+        shell: pwsh
+        env:
+          CINNABAR_BUILD_COMMIT: ${{ github.sha }}
+        run: cargo build --locked --release -p cinnabar -p cinnabar-mcp --features cinnabar/developer-control
       - name: Build the schematic importer
         shell: pwsh
         env:
@@ -95,6 +105,7 @@ jobs:
         shell: pwsh
         run: python .github/actions/build-cache/cache.py verify-inputs
       - name: Stage the checkout binaries
+        if: env.HEADLESS_TEST != 'true'
         shell: pwsh
         run: |
           $release = 'builder-artifact/target/release'
@@ -114,8 +125,25 @@ jobs:
           Copy-Item -LiteralPath 'assets/licenses' -Destination 'builder-artifact' -Recurse
           Set-Content -LiteralPath "$release/builder-commit.txt" -Value $env:GITHUB_SHA -Encoding ASCII
       - uses: actions/upload-artifact@v7
+        if: env.HEADLESS_TEST != 'true'
         with:
           name: cinnabar-builder-windows-x64
           path: builder-artifact/
           if-no-files-found: error
           retention-days: 14
+      - name: Stage the headless test binaries
+        if: env.HEADLESS_TEST == 'true'
+        shell: pwsh
+        run: |
+          $out = 'headless-test-artifact'
+          $wasm = 'target/builder-importer/wasm32-unknown-unknown/release/schematica_guest.wasm'
+          New-Item -ItemType Directory -Force -Path $out | Out-Null
+          Copy-Item -LiteralPath 'target/release/cinnabar.exe', 'target/release/cinnabar-mcp.exe', 'target/builder-importer/release/schematica-builder.exe', $wasm -Destination $out
+          Set-Content -LiteralPath "$out/builder-commit.txt" -Value $env:GITHUB_SHA -Encoding ASCII
+      - uses: actions/upload-artifact@v7
+        if: env.HEADLESS_TEST == 'true'
+        with:
+          name: cinnabar-builder-headless-test-windows-x64
+          path: headless-test-artifact/
+          if-no-files-found: error
+          retention-days: 7
