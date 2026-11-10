@@ -88,7 +88,8 @@ jobs:
           CINNABAR_BUILD_COMMIT: ${{ github.sha }}
         run: |
           cargo test --locked --release --manifest-path crates/inventory/Cargo.toml --lib gameplay_creative_take_keeps_the_hotbar_unconfirmed_until_the_server_accepts
-          cargo test --locked --release -p cinnabar --no-default-features --lib ordered_fast_place_checks_the_predicted_state
+          # The client test harness uses the default acceptance feature.
+          cargo test --locked --release -p cinnabar --lib ordered_fast_place_checks_the_predicted_state
       - name: Build upstream runtime binaries
         shell: bash
         run: make package-binaries
