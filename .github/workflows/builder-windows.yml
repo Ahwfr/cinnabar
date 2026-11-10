@@ -1,0 +1,72 @@
+name: Builder Windows
+
+on:
+  push:
+    branches: [builder-features]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: builder-windows-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  binaries:
+    if: github.repository == 'Ahwfr/cinnabar'
+    runs-on: windows-2025
+    timeout-minutes: 120
+    env:
+      CARGO_BUILD_BUILD_DIR: "{workspace-root}/target"
+      CARGO_INCREMENTAL: "0"
+      CARGO_PROFILE_RELEASE_DEBUG: line-tables-only
+      CARGO_PROFILE_RELEASE_SPLIT_DEBUGINFO: packed
+      CARGO_PROFILE_RELEASE_STRIP: debuginfo
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@v6
+        with:
+          go-version: stable
+          cache: false
+      - name: Set up Rust and Make
+        shell: pwsh
+        run: |
+          rustup toolchain install
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          if (!(Get-Command make -ErrorAction SilentlyContinue)) {
+            choco install make --no-progress -y
+            if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          }
+      - name: Build upstream runtime binaries
+        shell: bash
+        run: make package-binaries
+      - name: Build the schematic importer
+        shell: pwsh
+        run: ./builder/Build-Builder.ps1 -ImporterOnly
+      - name: Stage the checkout binaries
+        shell: pwsh
+        run: |
+          $release = 'builder-artifact/target/release'
+          $importer = 'builder-artifact/target/builder-importer'
+          $wasm = 'wasm32-unknown-unknown/release'
+          New-Item -ItemType Directory -Force -Path $release, "$importer/release", "$importer/$wasm" | Out-Null
+          foreach ($line in Get-Content -LiteralPath 'packaging/common/runtime-binaries.txt') {
+            $name = ($line -split '\s+')[0]
+            Copy-Item -LiteralPath "target/release/$name.exe" -Destination $release
+          }
+          Copy-Item -LiteralPath 'target/release/assetc.exe' -Destination $release
+          ./packaging/windows/fetch-dxc.ps1 -Out $release
+          Copy-Item -LiteralPath 'target/builder-importer/release/schematica-builder.exe' -Destination "$importer/release"
+          Copy-Item -LiteralPath "target/builder-importer/$wasm/schematica_guest.wasm" -Destination "$importer/$wasm"
+          Copy-Item -LiteralPath 'LICENSE', 'THIRD_PARTY_NOTICES.md' -Destination 'builder-artifact'
+          Copy-Item -LiteralPath 'builder/schematica/SCHEMATICA-LICENSE.txt' -Destination 'builder-artifact'
+          Copy-Item -LiteralPath 'assets/licenses' -Destination 'builder-artifact' -Recurse
+          Set-Content -LiteralPath "$release/builder-commit.txt" -Value $env:GITHUB_SHA -Encoding ASCII
+      - uses: actions/upload-artifact@v7
+        with:
+          name: cinnabar-builder-windows-x64
+          path: builder-artifact/
+          if-no-files-found: error
+          retention-days: 14

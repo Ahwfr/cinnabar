@@ -15,6 +15,12 @@ Set-Location cinnabar-builder
 
 You can also open **Build Builder.cmd** in the `builder` folder. When the build finishes, open **Play Builder.cmd** to start the client. Its account, worlds, settings and mods live under `.local/builder-user` in this checkout. The shortcuts use Windows PowerShell with a process-only `RemoteSigned` policy for the scripts checked out by Git.
 
+### Use a GitHub build
+
+On the fork's [Actions page](https://github.com/Ahwfr/cinnabar/actions), open a successful **Builder Windows** run for the commit you checked out. Download **cinnabar-builder-windows-x64**. Extract its `target` folder into the checkout root with Builder closed. The launcher checks the build's commit when it starts.
+
+The artifact contains the binaries and notices. The checkout needs its locally generated game assets. If you haven't prepared them yet, run `target/release/assetc.exe prepare --accept-eula` from the checkout root once you accept the Minecraft EULA. Then open **Play Builder.cmd**.
+
 ## Import a schematic
 
 Close Builder and open **Import Schematics.cmd** in the same folder. Choose up to eight `.schematic`, `.schem`, `.litematic` or `.mcstructure` files. The importer builds one library directly in this Builder profile. It leaves your input files in place and keeps the previous library under `.local/builder-user/library-backups`. If conversion fails, the previous library remains installed.
