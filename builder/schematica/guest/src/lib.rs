@@ -8,6 +8,22 @@ mod hotkeys;
 mod menu;
 mod overlay;
 
+// Embed the revision in the guest itself so the importer labels the code it actually packages.
+#[cfg(target_arch = "wasm32")]
+const BUILD_REVISION: &str = match option_env!("SCHEMATICA_BUILD_REVISION") {
+    Some(revision) => revision,
+    None => "",
+};
+
+#[cfg(target_arch = "wasm32")]
+#[used]
+#[unsafe(link_section = "schematica:build-revision")]
+static GUEST_REVISION: [u8; BUILD_REVISION.len()] = {
+    let mut bytes = [0; BUILD_REVISION.len()];
+    bytes.copy_from_slice(BUILD_REVISION.as_bytes());
+    bytes
+};
+
 use cinnabar::{
     extension::{budget, gameplay, hud, input, item_use, panel, settings, terrain},
     world_draw::drawing,

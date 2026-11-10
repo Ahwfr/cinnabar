@@ -27,7 +27,7 @@ Builder Windows saves Cargo's compiled dependencies and incremental compiler dat
 
 Close Builder and open **Import Schematics.cmd** in the same folder. Choose up to eight `.schematic`, `.schem`, `.litematic` or `.mcstructure` files. The importer builds one library directly in this Builder profile. It leaves your input files in place and keeps the previous library under `.local/builder-user/library-backups`. If conversion fails, the previous library remains installed.
 
-Start Builder and enable **schematica-builder** under **Settings → Mods**. Grant the mod's requested drawing and terrain permissions. In a world press **Alt+J**, choose the schematic and select **Load selected**. The importer currently limits each schematic to 64 blocks on an axis, 5,120 cells including air, and 128 palette entries.
+Start Builder and enable **Schematica Builder [commit]** under **Settings → Mods**. The bracketed revision identifies the guest template that was imported. After an update, reimport your schematics and check that this revision matches the first seven characters in `target/release/builder-commit.txt`. The mod keeps its existing file name so settings and permissions stay attached. Grant the mod's requested drawing and terrain permissions. In a world press **Alt+J**, choose the schematic and select **Load selected**. The importer currently limits each schematic to 64 blocks on an axis, 5,120 cells including air, and 128 palette entries.
 
 You can also pass exact files, or install the built-in arch to try the flow:
 

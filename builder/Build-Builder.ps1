@@ -16,16 +16,21 @@ $manifest = Join-Path $PSScriptRoot 'schematica/Cargo.toml'
 $target = Join-Path $checkout 'target/builder-importer'
 $profileDir = if ($Profile -eq 'dev') { 'debug' } else { $Profile }
 $stamp = Join-Path $checkout "target/$profileDir/builder-commit.txt"
+$previousRevision = [Environment]::GetEnvironmentVariable('SCHEMATICA_BUILD_REVISION', 'Process')
 Push-Location -LiteralPath $checkout
 try {
+    $commit = git rev-parse HEAD
+    if ($LASTEXITCODE) { throw 'Could not read the Builder source revision.' }
+    if (!$ImporterOnly -and (git status --porcelain)) {
+        throw 'Commit or stash changes before building the launcher version.'
+    }
+    $env:SCHEMATICA_BUILD_REVISION = $commit
     cargo build --locked --release --manifest-path $manifest --target-dir $target -p schematica-builder
     if ($LASTEXITCODE) { throw 'Could not build the schematic importer.' }
     cargo build --locked --release --manifest-path $manifest --target-dir $target -p schematica-guest --target wasm32-unknown-unknown
     if ($LASTEXITCODE) { throw 'Could not build the schematic guest.' }
     if ($ImporterOnly) { return }
 
-    $commit = git rev-parse HEAD
-    if ($LASTEXITCODE -or (git status --porcelain)) { throw 'Commit or stash changes before building the launcher version.' }
     if (Test-Path -LiteralPath $stamp) { Remove-Item -LiteralPath $stamp }
     make play-build "PROFILE=$Profile"
     if ($LASTEXITCODE) { throw 'Cinnabar build failed. Check the build output above.' }
@@ -38,4 +43,7 @@ try {
         }
     }
     Set-Content -LiteralPath $stamp -Value $commit -Encoding ASCII
-} finally { Pop-Location }
+} finally {
+    [Environment]::SetEnvironmentVariable('SCHEMATICA_BUILD_REVISION', $previousRevision, 'Process')
+    Pop-Location
+}

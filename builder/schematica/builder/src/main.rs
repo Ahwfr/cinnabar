@@ -10,7 +10,7 @@ use std::{
     io::Write,
     path::{Path, PathBuf},
 };
-use wasm_encoder::{CustomSection, Encode};
+use wasm_encoder::{ComponentNameSection, CustomSection, Encode};
 
 fn main() -> Result<()> {
     let args: Vec<_> = env::args_os().skip(1).collect();
@@ -190,6 +190,10 @@ mod tests {
 }
 
 fn component(core: &[u8]) -> Result<Vec<u8>> {
+    let name = match guest_revision(core)? {
+        Some(revision) => format!("Schematica Builder [{}]", &revision[..7]),
+        None => "Schematica Builder [unstamped]".to_owned(),
+    };
     let mut component = wit_component::ComponentEncoder::default()
         .module(core)?
         .validate(true)
@@ -200,7 +204,31 @@ fn component(core: &[u8]) -> Result<Vec<u8>> {
     };
     component.push(0);
     section.encode(&mut component);
+    let mut names = ComponentNameSection::new();
+    names.component(&name);
+    component.push(0);
+    names.encode(&mut component);
     Ok(component)
+}
+
+/// Reads the build stamp from the guest template, independent of the importer's version.
+fn guest_revision(core: &[u8]) -> Result<Option<&str>> {
+    for section in wasmparser::Parser::new(0).parse_all(core) {
+        if let wasmparser::Payload::CustomSection(section) = section?
+            && section.name() == "schematica:build-revision"
+        {
+            let revision = std::str::from_utf8(section.data())?;
+            if revision.is_empty() {
+                return Ok(None);
+            }
+            ensure!(
+                revision.len() == 40 && revision.bytes().all(|b| b.is_ascii_hexdigit()),
+                "invalid schematic guest build revision"
+            );
+            return Ok(Some(revision));
+        }
+    }
+    Ok(None)
 }
 
 fn write_blueprint(schematic: &Schematic, output: &Path) -> Result<()> {
