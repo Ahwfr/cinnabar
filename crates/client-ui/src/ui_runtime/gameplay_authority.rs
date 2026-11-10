@@ -222,7 +222,7 @@ impl UiRuntime {
             };
             let ledger = player_runtime.inventory.ledger();
             self.session.inventory_open = self.session.screen.book.is_some()
-                || ledger.personal_inventory_desired_open()
+                || ledger.personal_inventory_visible()
                 || ledger.storage_inventory_desired_open();
             if self.session.inventory_open {
                 self.session.chat_focused = false;

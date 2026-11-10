@@ -16,8 +16,8 @@ $env:CINNABAR_LOG = 'info,cinnabar::block_use=debug,cinnabar::inventory_requests
 Check `.local/builder-user/data/logs/client.log` for the session revision, then check **Settings → Mods** for the imported guest revision. Open a disposable local world, enable Fast Place in Schematica settings, and grant terrain, item use and inventory. Place a real support bordering one missing ghost. Click once and keep the crosshair still for one second.
 
 - **Survival.** Start with an empty selected slot and two matching blocks in the main inventory. Expect a request ID, an accepted inventory response for that ID, a ready backing stack, equipment admission, and one click-block batch. The placed item count should drop by one. Repeat with the matching stack in a different hotbar slot. That path has no inventory request.
-- **Creative.** Start with no matching item and one empty hotbar slot. Expect a catalog request, accepted inventory response, equipment admission, and one click-block batch. The item should remain in the selected slot.
-- **Manual.** Hold the planned block and click its support. The normal placement path owns that click. Repeat while standing inside the hologram and aiming outside the schematic.
+- **Creative.** Start with no matching item and one empty hotbar slot. Expect an inventory open, a catalog take to cursor, a transfer to the hotbar, and an inventory close before equipment admission and one click-block batch. Both inventory requests should be accepted. The item should remain in the selected slot.
+- **Manual.** Hold the planned block and click its support with Fast Place enabled. An exact placement goes through the assist, and a mismatched orientation is refused. Turn Fast Place off to place freely. Repeat while standing inside the hologram and aiming outside the schematic. The normal placement path owns that click.
 
 Run the Survival and Creative checks on plain stone before checking these states:
 

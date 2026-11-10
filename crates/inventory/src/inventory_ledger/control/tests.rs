@@ -31,6 +31,22 @@ fn acknowledge_close(ledger: &mut PlayerInventoryLedger, window_id: i32, window_
 }
 
 #[test]
+fn a_cancelled_background_open_closes_when_the_server_answers() {
+    let mut ledger = ledger_with_slot_zero();
+    assert!(ledger.request_background_personal_open(42));
+    assert!(ledger.mark_transport_enqueued(0));
+    ledger.request_background_personal_close();
+    ledger.apply(&InventoryEvent::Open(personal_open(7)));
+    assert!(!ledger.personal_inventory_visible());
+    assert!(!ledger.background_personal_active());
+    assert!(ledger.mark_transport_enqueued(1));
+    acknowledge_close(&mut ledger, 7, super::PERSONAL_INVENTORY_WINDOW_TYPE);
+    assert!(!ledger.background_personal_busy());
+    assert!(ledger.request_personal_open(42));
+    assert!(ledger.personal_inventory_visible());
+}
+
+#[test]
 fn mounted_reply_finishes_the_request_without_a_personal_reset_close() {
     let mut ledger = ledger_with_slot_zero();
     assert!(ledger.request_personal_open(900));

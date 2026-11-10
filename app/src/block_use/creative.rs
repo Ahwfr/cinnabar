@@ -3,7 +3,8 @@
 use super::*;
 use bevy::prelude::Resource;
 use inventory::inventory_ledger::{
-    InventoryTarget, PLAYER_INVENTORY_SLOT_COUNT, PlayerInventorySlot,
+    CellGesture, CreativeDestination, InventoryTarget, PLAYER_INVENTORY_SLOT_COUNT,
+    PlayerInventorySlot,
 };
 use mod_host::CreativePlacementOffer;
 use protocol::NetworkItemStack;
@@ -32,7 +33,84 @@ struct Pending {
     original_slot: u8,
     key: StackKey,
     request: Option<i32>,
+    catalog: Option<Catalog>,
     selecting: bool,
+}
+
+#[derive(Clone, Copy, Debug)]
+enum Catalog {
+    Opening(u32),
+    Taking(i32),
+    Moving(i32),
+    Closing,
+}
+
+enum CatalogStep {
+    Waiting,
+    Ready,
+    Failed,
+}
+
+fn advance_catalog(player: &mut client_state::PlayerRuntime, pending: &mut Pending) -> CatalogStep {
+    let Some(stage) = pending.catalog else {
+        return CatalogStep::Ready;
+    };
+    let ledger = player.inventory_commands();
+    if matches!(stage, Catalog::Closing) {
+        return if ledger.background_personal_busy() {
+            CatalogStep::Waiting
+        } else {
+            pending.catalog = None;
+            CatalogStep::Ready
+        };
+    }
+    if !ledger.background_personal_active() {
+        return CatalogStep::Failed;
+    }
+    let next = match stage {
+        Catalog::Opening(id) if ledger.background_personal_ready() => ledger
+            .begin_creative_take(id, CreativeDestination::Cursor, None)
+            .map(Catalog::Taking),
+        Catalog::Taking(request) if !ledger.has_pending_request(request) => {
+            if ledger.cursor_stack().map(key) != Some(pending.key)
+                || !matches!(
+                    ledger.slot_state(pending.slot),
+                    Some(PlayerInventorySlot::Empty)
+                )
+            {
+                ledger.request_background_personal_close();
+                return CatalogStep::Failed;
+            }
+            ledger
+                .begin_target_gesture(InventoryTarget::Player(pending.slot), CellGesture::Click)
+                .map(Catalog::Moving)
+        }
+        Catalog::Moving(request) if !ledger.has_pending_request(request) => {
+            let confirmed = ledger.backing_stack(pending.slot).map(key) == Some(pending.key);
+            ledger.request_background_personal_close();
+            if !confirmed {
+                return CatalogStep::Failed;
+            }
+            Ok(Catalog::Closing)
+        }
+        _ => return CatalogStep::Waiting,
+    };
+    match next {
+        Ok(next) => {
+            bevy::log::debug!(
+                slot = pending.slot,
+                ?next,
+                "Fast Place: advancing Creative catalog"
+            );
+            pending.catalog = Some(next);
+            CatalogStep::Waiting
+        }
+        Err(error) => {
+            bevy::log::info!(slot = pending.slot, ?stage, %error, "Fast Place: Creative catalog gesture failed");
+            ledger.request_background_personal_close();
+            CatalogStep::Failed
+        }
+    }
 }
 
 fn key(stack: &NetworkItemStack) -> StackKey {
@@ -91,15 +169,6 @@ pub(super) fn try_start(
         })
     };
     let selected = observed.selection.slot;
-    if ledger.backing_stack(selected).and_then(quality).is_some() {
-        bevy::log::debug!(
-            slot = selected,
-            "Fast Place: planned block is held, leaving the click to normal placement"
-        );
-        policy.pending = None;
-        policy.claimed = false;
-        return false;
-    }
     policy.claimed = false;
     if observed.target.face > 5
         || placement_cell(observed.target.position, observed.target.face) != offer.position
@@ -111,6 +180,10 @@ pub(super) fn try_start(
             "Fast Place needs the support face adjoining the ghost"
         );
         policy.pending = None;
+        player
+            .inventory
+            .ledger_mut()
+            .request_background_personal_close();
         return false;
     }
     if policy.pending.is_some() {
@@ -123,7 +196,7 @@ pub(super) fn try_start(
             let stack = ledger.backing_stack(slot)?;
             Some((quality(stack)?, slot, key(stack)))
         })
-        .max_by_key(|(exact, _, _)| *exact);
+        .max_by_key(|(exact, slot, _)| (*exact, *slot == selected));
     let empty = (0..protocol::HOTBAR_SLOT_COUNT)
         .find(|slot| matches!(ledger.slot_state(*slot), Some(PlayerInventorySlot::Empty)));
     let carried = (protocol::HOTBAR_SLOT_COUNT..PLAYER_INVENTORY_SLOT_COUNT as u8)
@@ -145,8 +218,8 @@ pub(super) fn try_start(
             })
             .max_by_key(|(exact, _, _)| *exact)
     }));
-    let (slot, key, request) = if let Some((_, slot, key)) = hotbar {
-        (slot, key, None)
+    let (slot, key, request, catalog) = if let Some((_, slot, key)) = hotbar {
+        (slot, key, None, None)
     } else if let Some((_, source, item)) = carried {
         let slot = empty.unwrap_or(selected);
         let request = match player
@@ -159,7 +232,7 @@ pub(super) fn try_start(
                 return false;
             }
         };
-        (slot, item, Some(request))
+        (slot, item, Some(request), None)
     } else {
         if game_mode != PlayerGameMode::Creative {
             bevy::log::info!(block = %offer.name, "Fast Place needs this block in the player's inventory");
@@ -173,20 +246,17 @@ pub(super) fn try_start(
             );
             return false;
         };
-        let request = match player
+        if !player
             .inventory_commands()
-            .begin_windowless_creative_hotbar_take(id, slot)
+            .request_background_personal_open(stream.local_player_runtime_id())
         {
-            Ok(request) => request,
-            Err(error) => {
-                bevy::log::info!(block = %offer.name, slot, %error, "Fast Place inventory request was refused locally");
-                return false;
-            }
-        };
-        (slot, item, Some(request))
+            bevy::log::info!(block = %offer.name, slot, "Fast Place could not open Creative inventory");
+            return false;
+        }
+        (slot, item, None, Some(Catalog::Opening(id)))
     };
     policy.claimed = true;
-    bevy::log::info!(block = %offer.name, slot, ?request, ?game_mode, item_network_id = key.0,
+    bevy::log::info!(block = %offer.name, slot, ?request, ?catalog, ?game_mode, item_network_id = key.0,
         metadata = key.1, item_block_runtime_id = key.2, "Fast Place waiting for inventory and selection");
     policy.pending = Some(Pending {
         game_mode,
@@ -203,16 +273,24 @@ pub(super) fn try_start(
         original_slot: selected,
         key,
         request,
+        catalog,
         selecting: false,
     });
     true
 }
 
 /// Clears any queued press if gameplay lost input ownership.
-pub(super) fn clear(policy: Option<&mut CreativePlacement>) {
+pub(super) fn clear(
+    policy: Option<&mut CreativePlacement>,
+    player: &mut client_state::PlayerRuntime,
+) {
     if let Some(policy) = policy {
         policy.pending = None;
         policy.claimed = false;
+        player
+            .inventory
+            .ledger_mut()
+            .request_background_personal_close();
     }
 }
 
@@ -243,9 +321,17 @@ pub(super) fn resume(
     if policy.offer.as_ref() != Some(&pending.offer) {
         bevy::log::debug!(ghost = ?pending.offer.position, current = ?policy.offer, "Fast Place: schematic offer changed before placement");
         policy.claimed = false;
+        player
+            .inventory
+            .ledger_mut()
+            .request_background_personal_close();
         return false;
     }
     let Some(stream) = context.client_world.stream.as_ref() else {
+        player
+            .inventory
+            .ledger_mut()
+            .request_background_personal_close();
         return true;
     };
     if player.facts.player_game_mode() != Some(pending.game_mode)
@@ -261,7 +347,22 @@ pub(super) fn resume(
         || (!pending.selecting && player.selected_hotbar_slot() != Some(pending.original_slot))
     {
         bevy::log::info!(block = %pending.offer.name, "Fast Place cancelled after its target, input, mode or deadline changed");
+        player
+            .inventory
+            .ledger_mut()
+            .request_background_personal_close();
         return true;
+    }
+    match advance_catalog(player, &mut pending) {
+        CatalogStep::Waiting => {
+            policy.pending = Some(pending);
+            return true;
+        }
+        CatalogStep::Failed => {
+            bevy::log::info!(block = %pending.offer.name, "Fast Place: Creative inventory did not supply the block");
+            return true;
+        }
+        CatalogStep::Ready => {}
     }
     let ledger = player.inventory.ledger();
     if pending

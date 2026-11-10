@@ -53,7 +53,7 @@ pub(super) fn maintain_block_use(
         .zip(caps)
         .filter(|(_, caps)| focused && !context.focus.ui_focused && caps.can_use_blocks())
     else {
-        creative::clear(context.creative.as_deref_mut());
+        creative::clear(context.creative.as_deref_mut(), &mut player_runtime);
         runtime.clear_press();
         stop_block_use(&mut runtime, &context, false);
         return;
@@ -87,7 +87,7 @@ pub(super) fn maintain_block_use(
         return;
     }
     if attacking {
-        creative::clear(context.creative.as_deref_mut());
+        creative::clear(context.creative.as_deref_mut(), &mut player_runtime);
     } else if creative::resume(
         &mut player_runtime,
         &mut context,

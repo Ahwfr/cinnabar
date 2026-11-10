@@ -80,7 +80,7 @@ pub(crate) fn press(
             &state,
         ) else {
             bevy::log::debug!("Fast Place trace: use press has no native support hit");
-            creative::clear(context.creative.as_deref_mut());
+            creative::clear(context.creative.as_deref_mut(), &mut player);
             runtime.record(
                 ItemUseTrigger::PlayerInput,
                 clock.now,

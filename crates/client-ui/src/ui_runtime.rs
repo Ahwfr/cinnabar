@@ -398,7 +398,7 @@ impl UiRuntime {
             self.session.inventory_open = player_runtime
                 .inventory
                 .ledger()
-                .personal_inventory_desired_open()
+                .personal_inventory_visible()
                 || player_runtime
                     .inventory
                     .ledger()

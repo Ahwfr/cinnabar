@@ -31,6 +31,12 @@ impl PlayerInventoryLedger {
             return;
         };
         let requested_generation = self.settle_open_request();
+        let cancelled_background = self.controls.background_personal
+            && !self.controls.personal.desired_open
+            && requested_generation.is_some();
+        if requested_generation.is_none() && !self.controls.personal.desired_open {
+            self.controls.background_personal = false;
+        }
         let generation = requested_generation
             .or(match self.personal {
                 Some(
@@ -66,7 +72,7 @@ impl PlayerInventoryLedger {
             window_id,
             window_type: open.window_type,
         });
-        self.controls.personal.desired_open = true;
+        self.controls.personal.desired_open = !cancelled_background;
         self.personal = Some(crate::inventory_ledger::PersonalWindow::Open { generation });
     }
 

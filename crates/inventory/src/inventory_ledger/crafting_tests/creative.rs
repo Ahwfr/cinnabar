@@ -70,7 +70,7 @@ fn creative_take_moves_a_full_stack_into_the_cursor() {
 }
 
 #[test]
-fn gameplay_creative_take_keeps_the_hotbar_unconfirmed_until_the_server_accepts() {
+fn background_creative_catalog_transfers_a_confirmed_cursor_stack_to_hotbar() {
     let mut ledger = PlayerInventoryLedger::default();
     ledger.apply(&InventoryEvent::Authority(InventoryAuthority::Server));
     ledger.apply_registry(&registry());
@@ -79,33 +79,47 @@ fn gameplay_creative_take_keeps_the_hotbar_unconfirmed_until_the_server_accepts(
         slots: vec![NetworkItemStack::empty(); PLAYER_INVENTORY_SLOT_COUNT].into(),
         storage_item: NetworkItemStack::empty(),
     }));
-    assert!(ledger.begin_windowless_creative_hotbar_take(44, 4).is_err());
     creative(&mut ledger);
-    assert!(
-        ledger
-            .begin_windowless_creative_hotbar_take(44, 10)
-            .is_err()
-    );
-    let request = ledger.begin_windowless_creative_hotbar_take(44, 4).unwrap();
-    assert!(!ledger.personal_inventory_desired_open());
-    assert!(ledger.has_pending_request(request));
-    assert!(ledger.backing_stack(4).is_none());
-    assert_eq!(ledger.displayed_stack(4).unwrap().count, 1);
-    assert!(ledger.pending_batch().unwrap().is_some());
+    assert!(ledger.request_background_personal_open(42));
+    assert!(!ledger.personal_inventory_visible());
+    assert!(!ledger.background_personal_ready());
+    assert!(ledger.mark_transport_enqueued(0));
+    ledger.apply(&InventoryEvent::Open(protocol::ContainerOpenEvent {
+        container: ContainerIdentity::window(0),
+        window_type: PERSONAL_INVENTORY_WINDOW_TYPE,
+        position: [0; 3],
+        runtime_entity_id: 42,
+    }));
+    assert!(ledger.background_personal_ready());
+    assert!(!ledger.personal_inventory_visible());
+    let request = ledger
+        .begin_creative_take(44, CreativeDestination::Cursor, None)
+        .unwrap();
     assert!(ledger.mark_transport_enqueued(10));
+    respond(&mut ledger, request, &[(CONTAINER_NAME_CURSOR, 0, 64, 700)]);
+    let request = ledger.begin_click(4).unwrap();
+    assert!(ledger.backing_stack(4).is_none());
+    assert_eq!(ledger.displayed_stack(4).unwrap().count, 64);
+    assert!(ledger.mark_transport_enqueued(20));
     respond(
         &mut ledger,
         request,
-        &[(
-            protocol::CONTAINER_NAME_COMBINED_HOTBAR_AND_INVENTORY,
-            4,
-            1,
-            700,
-        )],
+        &[
+            (CONTAINER_NAME_CURSOR, 0, 0, -1),
+            (
+                protocol::CONTAINER_NAME_COMBINED_HOTBAR_AND_INVENTORY,
+                4,
+                64,
+                700,
+            ),
+        ],
     );
     assert!(!ledger.has_pending_request(request));
     assert_eq!(ledger.backing_stack(4).unwrap().stack_network_id, 700);
-    assert!(ledger.begin_windowless_creative_hotbar_take(44, 4).is_err());
+    ledger.request_background_personal_close();
+    assert!(!ledger.personal_inventory_desired_open());
+    assert!(ledger.background_personal_busy());
+    assert!(ledger.pending_batch().unwrap().is_some());
 }
 
 #[test]

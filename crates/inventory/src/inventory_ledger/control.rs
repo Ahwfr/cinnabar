@@ -79,6 +79,7 @@ pub(super) struct WindowControls {
     pub personal: WindowControl,
     pub storage: WindowControl,
     pub personal_target: u64,
+    pub background_personal: bool,
 }
 
 impl WindowControls {

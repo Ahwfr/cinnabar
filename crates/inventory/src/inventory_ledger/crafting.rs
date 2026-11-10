@@ -359,41 +359,10 @@ impl PlayerInventoryLedger {
         destination: CreativeDestination,
         requested: Option<u8>,
     ) -> Result<i32, InventoryGestureError> {
-        self.creative_take(creative_network_id, destination, requested, true)
-    }
-
-    /// Requests one catalog block into a known empty hotbar slot during gameplay.
-    pub fn begin_windowless_creative_hotbar_take(
-        &mut self,
-        creative_network_id: u32,
-        slot: u8,
-    ) -> Result<i32, InventoryGestureError> {
-        if slot >= protocol::HOTBAR_SLOT_COUNT
-            || self.storage.is_some()
-            || self.personal_inventory_desired_open()
-            || self.cursor_stack().is_some()
-        {
-            return Err(InventoryGestureError::InvalidRequest);
-        }
-        self.creative_take(
-            creative_network_id,
-            CreativeDestination::Player(slot),
-            Some(1),
-            false,
-        )
-    }
-
-    fn creative_take(
-        &mut self,
-        creative_network_id: u32,
-        destination: CreativeDestination,
-        requested: Option<u8>,
-        needs_window: bool,
-    ) -> Result<i32, InventoryGestureError> {
         if self.permissions.instabuild != Some(true) {
             return Err(InventoryGestureError::InvalidRequest);
         }
-        let personal_generation = self.gesture_preflight(needs_window)?;
+        let personal_generation = self.gesture_preflight(true)?;
         let item = self
             .creative
             .as_ref()

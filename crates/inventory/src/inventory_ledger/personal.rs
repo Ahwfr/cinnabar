@@ -38,6 +38,50 @@ impl PlayerInventoryLedger {
         self.controls.personal.desired_open
     }
 
+    /// Background catalog requests use the server window without opening the player's UI.
+    #[must_use]
+    pub const fn personal_inventory_visible(&self) -> bool {
+        self.personal_inventory_desired_open() && !self.controls.background_personal
+    }
+
+    pub fn request_background_personal_open(&mut self, runtime_id: u64) -> bool {
+        if self.personal_inventory_desired_open()
+            || self.controls.personal.server_window().is_some()
+            || self.controls.personal.sent.is_some()
+            || self.cursor_stack().is_some()
+            || self.resync_required()
+            || !self.request_personal_open(runtime_id)
+        {
+            return false;
+        }
+        self.controls.background_personal = true;
+        true
+    }
+
+    #[must_use]
+    pub const fn background_personal_active(&self) -> bool {
+        self.controls.background_personal && self.personal_inventory_desired_open()
+    }
+
+    #[must_use]
+    pub fn background_personal_ready(&self) -> bool {
+        self.background_personal_active() && self.controls.personal.confirmed.is_some()
+    }
+
+    #[must_use]
+    pub fn background_personal_busy(&self) -> bool {
+        self.controls.background_personal
+            && (self.controls.personal.desired_open
+                || self.controls.personal.confirmed.is_some()
+                || self.controls.personal.sent.is_some())
+    }
+
+    pub fn request_background_personal_close(&mut self) {
+        if self.background_personal_active() {
+            self.request_personal_close();
+        }
+    }
+
     /// Whether the current storage-screen intent still wants its interface visible.
     #[must_use]
     pub const fn storage_inventory_desired_open(&self) -> bool {
@@ -114,6 +158,7 @@ impl PlayerInventoryLedger {
         if self.authority.is_none() || target_runtime_id == 0 || self.storage.is_some() {
             return false;
         }
+        self.controls.background_personal = false;
         self.controls.personal_target = target_runtime_id;
         self.controls.personal.desired_open = true;
         if let Some(PersonalWindow::Closing {
