@@ -21,7 +21,7 @@ On the fork's [Actions page](https://github.com/Ahwfr/cinnabar/actions), open a 
 
 The artifact contains the binaries and notices. The checkout needs its locally generated game assets. If you haven't prepared them yet, run `target/release/assetc.exe prepare --accept-eula` from the checkout root once you accept the Minecraft EULA. Then open **Play Builder.cmd**.
 
-Builder Windows saves Cargo's compiled dependencies and incremental compiler data between runs. A feature or fix can reuse work from the previous successful build. Cargo checks which inputs changed and recompiles what the new executable needs. The first run with a new cache or Rust toolchain has more work to do. The workflow still runs the Fast Place tests and publishes a complete ZIP.
+Builder Windows saves Cargo's compiled dependencies and incremental compiler data between runs. A feature or fix can reuse work from the previous successful build. Cargo checks which inputs changed and recompiles what the new executable needs. The first run with a new cache or Rust toolchain has more work to do. The workflow builds the runtime and schematic importer and publishes a complete ZIP.
 
 ## Import a schematic
 
@@ -36,7 +36,7 @@ You can also pass exact files, or install the built-in arch to try the flow:
 .\builder\Start-Builder.ps1 -ImportOnly -Demo
 ```
 
-**Fast Place** is off by default. In a Creative world, open **Alt+K** and turn it on. Grant **Inventory** and **Item Use** in Settings → Mods if requested. Aim through a missing ghost at the face of a real block that borders it and right-click once. Builder selects a matching hotbar block or takes one from Creative into an empty hotbar slot, then places it after the inventory confirms it. Leave a hotbar slot free if you do not already carry the block. Right-click places normally when you are already holding the planned block type or when Fast Place cannot start. Assisted placement still checks the planned state and skips unverified states, including multi-block placements. Reimport your schematic after upgrading so the library has the new controls. The client log records why an offered placement was refused.
+**Fast Place** is off by default. In a Creative or Survival world, open **Alt+K** and turn it on. Grant **Inventory** and **Item Use** in Settings → Mods if requested. Aim through a missing ghost at the face of a real block that borders it and right-click once. Builder first selects a matching hotbar block, or moves a matching main-inventory stack to a free hotbar slot (swapping with the selected slot if full). Survival consumes your blocks normally and never requests catalog items. Creative can take a missing block from the catalog into an empty hotbar slot. Placement waits for inventory confirmation. Leave a hotbar slot free if you do not already carry the block. Right-click places normally when you are already holding the planned block type or when Fast Place cannot start. Assisted placement still checks the planned state and skips unverified states, including multi-block placements. Reimport your schematic after upgrading so the library has the new controls. The client log records why an offered placement was refused.
 
 ## Update for a new Bedrock version
 

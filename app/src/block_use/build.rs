@@ -150,7 +150,7 @@ fn prepare(
                 bevy::log::info!(block = %expected.name, "Fast Place could not predict this placement");
                 return None;
             };
-            if game_mode != Some(PlayerGameMode::Creative)
+            if !matches!(game_mode, Some(PlayerGameMode::Creative | PlayerGameMode::Survival))
                 || observed.selection.item.count() == 0
                 || !world.is_air(expected.position).ok()?
                 || placement.position != expected.position

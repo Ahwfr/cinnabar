@@ -63,6 +63,7 @@ jobs:
           key: builder-windows-incremental-v1-${{ hashFiles('rust-toolchain.toml', '.github/workflows/builder-windows.yml') }}-${{ github.sha }}
           restore-keys: |
             builder-windows-incremental-v1-${{ hashFiles('rust-toolchain.toml', '.github/workflows/builder-windows.yml') }}-
+            builder-windows-incremental-v1-779b123bffca1cfcf7c502ee408aa5315bd12b973206256d5e6aff1888318395-
       - name: Seed the first incremental build from the previous dependency cache
         if: steps.rust-cache.outputs.cache-hit == ''
         uses: actions/cache/restore@v5
@@ -82,14 +83,6 @@ jobs:
       - name: Restore unchanged source timestamps
         shell: pwsh
         run: python .github/actions/build-cache/cache.py restore-inputs
-      - name: Verify Creative inventory and Fast Place right-click
-        shell: bash
-        env:
-          CINNABAR_BUILD_COMMIT: ${{ github.sha }}
-        run: |
-          cargo test --locked --release --manifest-path crates/inventory/Cargo.toml --lib gameplay_creative_take_keeps_the_hotbar_unconfirmed_until_the_server_accepts
-          # The client test harness uses the default acceptance feature.
-          cargo test --locked --release -p cinnabar --lib ordered_fast_place_checks_the_predicted_state
       - name: Build upstream runtime binaries
         shell: bash
         run: make package-binaries

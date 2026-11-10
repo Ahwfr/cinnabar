@@ -2,7 +2,9 @@
 
 use super::*;
 use bevy::prelude::Resource;
-use inventory::inventory_ledger::PlayerInventorySlot;
+use inventory::inventory_ledger::{
+    InventoryTarget, PLAYER_INVENTORY_SLOT_COUNT, PlayerInventorySlot,
+};
 use mod_host::CreativePlacementOffer;
 use protocol::NetworkItemStack;
 use semantic_input::identity::{InputAuthorityGeneration, InputSequence};
@@ -19,6 +21,7 @@ pub(crate) struct CreativePlacement {
 type StackKey = (i32, u32, i32);
 
 struct Pending {
+    game_mode: PlayerGameMode,
     offer: CreativePlacementOffer,
     support: ([i32; 3], u8, u32),
     scope: (u64, i32),
@@ -59,9 +62,11 @@ pub(super) fn try_start(
     let Some(offer) = policy.offer.clone() else {
         return false;
     };
-    if player.facts.player_game_mode() != Some(PlayerGameMode::Creative) {
+    let Some(game_mode @ (PlayerGameMode::Creative | PlayerGameMode::Survival)) =
+        player.facts.player_game_mode()
+    else {
         return false;
-    }
+    };
     if !PaletteWorld::new(
         stream.collision_store(),
         context.collisions.registry(stream.network_id_mode()),
@@ -113,6 +118,12 @@ pub(super) fn try_start(
         .max_by_key(|(exact, _, _)| *exact);
     let empty = (0..protocol::HOTBAR_SLOT_COUNT)
         .find(|slot| matches!(ledger.slot_state(*slot), Some(PlayerInventorySlot::Empty)));
+    let carried = (protocol::HOTBAR_SLOT_COUNT..PLAYER_INVENTORY_SLOT_COUNT as u8)
+        .filter_map(|slot| {
+            let stack = ledger.backing_stack(slot)?;
+            Some((quality(stack)?, slot, key(stack)))
+        })
+        .max_by_key(|(exact, _, _)| *exact);
     let catalog = empty.zip(ledger.creative_catalog().and_then(|catalog| {
         catalog
             .items
@@ -126,12 +137,26 @@ pub(super) fn try_start(
             })
             .max_by_key(|(exact, _, _)| *exact)
     }));
-    let prefer_catalog = catalog.is_some_and(|(_, (exact, _, _))| exact);
-    let (slot, key, request) = if let Some((_, slot, key)) =
-        hotbar.filter(|(exact, _, _)| *exact || !prefer_catalog)
-    {
+    let (slot, key, request) = if let Some((_, slot, key)) = hotbar {
         (slot, key, None)
+    } else if let Some((_, source, item)) = carried {
+        let slot = empty.unwrap_or(selected);
+        let request = match player
+            .inventory_commands()
+            .begin_windowless_hotbar_swap(InventoryTarget::Player(source), slot)
+        {
+            Ok(request) => request,
+            Err(error) => {
+                bevy::log::info!(block = %offer.name, source, slot, %error, "Fast Place inventory transfer was refused locally");
+                return false;
+            }
+        };
+        (slot, item, Some(request))
     } else {
+        if game_mode != PlayerGameMode::Creative {
+            bevy::log::info!(block = %offer.name, "Fast Place needs this block in the player's inventory");
+            return false;
+        }
         let Some((slot, (_, id, item))) = catalog else {
             bevy::log::info!(
                 block = %offer.name,
@@ -153,7 +178,9 @@ pub(super) fn try_start(
         (slot, item, Some(request))
     };
     policy.claimed = true;
+    bevy::log::info!(block = %offer.name, slot, ?request, ?game_mode, "Fast Place waiting for inventory and selection");
     policy.pending = Some(Pending {
+        game_mode,
         offer,
         support: support(observed),
         scope: (
@@ -207,7 +234,7 @@ pub(super) fn resume(
     let Some(stream) = context.client_world.stream.as_ref() else {
         return true;
     };
-    if player.facts.player_game_mode() != Some(PlayerGameMode::Creative)
+    if player.facts.player_game_mode() != Some(pending.game_mode)
         || policy.offer.as_ref() != Some(&pending.offer)
         || pending.scope
             != (
@@ -220,6 +247,7 @@ pub(super) fn resume(
         || context.client_world.respawn.input_held()
         || (!pending.selecting && player.selected_hotbar_slot() != Some(pending.original_slot))
     {
+        bevy::log::info!(block = %pending.offer.name, "Fast Place cancelled after its target, input, mode or deadline changed");
         return true;
     }
     let ledger = player.inventory.ledger();
@@ -231,12 +259,13 @@ pub(super) fn resume(
         return true;
     }
     if ledger.backing_stack(pending.slot).map(key) != Some(pending.key) {
+        bevy::log::info!(block = %pending.offer.name, slot = pending.slot, "Fast Place inventory did not confirm the requested block");
         return true;
     }
     if !pending.selecting {
         player
             .inventory
-            .queue_local_hotbar_selection(pending.slot, Some(PlayerGameMode::Creative));
+            .queue_local_hotbar_selection(pending.slot, Some(pending.game_mode));
         item_use.retire_reselected_use(pending.slot);
         pending.selecting = true;
     }
@@ -260,7 +289,7 @@ pub(super) fn resume(
         context,
         &context.origin,
         mode,
-        false,
+        pending.game_mode == PlayerGameMode::Survival,
         authority,
         movement.position_authority_identity().1,
         runtime,
@@ -271,15 +300,12 @@ pub(super) fn resume(
         return true;
     };
     if support(&observed) != pending.support {
+        bevy::log::info!(block = %pending.offer.name, "Fast Place support changed before placement");
         return true;
     }
     runtime.forget_press_resolution();
     runtime.selection_changed(&observed.selection);
-    let clock = RepeatClock::for_state(
-        context.time.elapsed(),
-        &state,
-        Some(PlayerGameMode::Creative),
-    );
+    let clock = RepeatClock::for_state(context.time.elapsed(), &state, Some(pending.game_mode));
     let mut build = build::BuildInput::new(
         observed,
         state,

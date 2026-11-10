@@ -156,7 +156,7 @@ foreach($screen in @('main','load','control','materials','settings','verifier','
             Add-Button 'assist' '#assist' 246 143 121 24
             Add-Node (New-Rect 16 184 364 49 $surface 5)
             Add-Label 'Fast Place' 27 190 200
-            Add-Label 'Creative. Aim through ghost at support.' 27 210 215 $muted
+            Add-Label 'Inventory blocks; Creative can supply.' 27 210 215 $muted
             Add-Button 'fast-place' '#fast-place' 246 196 121 24
             Add-Button 'hotkeys' 'Hotkeys' 16 252 84 22
             Add-Button 'close' 'Done' 296 252 84 22 $activeFill
