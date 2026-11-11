@@ -88,6 +88,14 @@ pub fn pressed(action: &str, keys: &input::Controls) -> bool {
 
 /// Resolves guest features from the same physical settings rows the native router observes.
 pub fn action(keys: &input::Controls, armed: &mut bool) -> Option<Action> {
+    if CACHE.with(|cache| cache.borrow().revision.is_none()) {
+        for (key, action) in [("KeyM", Action::Main), ("F6", Action::Config)] {
+            if keys.keys_pressed.iter().any(|pressed| pressed == key) {
+                *armed = false;
+                return Some(action);
+            }
+        }
+    }
     for (action, _, _) in crate::hotkeys::BINDINGS {
         if pressed(name(action), keys) {
             *armed = false;

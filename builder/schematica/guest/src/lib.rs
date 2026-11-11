@@ -461,16 +461,19 @@ impl Viewer {
             }
             return;
         }
-        if !active_world || !keys.gameplay {
-            self.menu_armed = false;
-            return;
-        }
-        if let Some(screen) = legacy.or_else(|| self.builder_hotkey(&keys, alt)) {
+        let gameplay = active_world && keys.gameplay;
+        // Opening a panel needs focused input, not a current placement snapshot.
+        // The host withholds key edges while another screen owns input.
+        if let Some(screen) = legacy.or_else(|| self.builder_hotkey(&keys, alt, gameplay)) {
             self.screen = screen;
             self.selected = None;
             self.verifier_page = 0;
             self.material_page = 0;
             menu::open(self, false);
+            return;
+        }
+        if !gameplay {
+            self.menu_armed = false;
             return;
         }
         let caps = drawing::capabilities();
@@ -570,7 +573,12 @@ impl Viewer {
     }
 
     /// Resolve chords before opening the main menu on release of a standalone M.
-    fn builder_hotkey(&mut self, keys: &input::Controls, alt: bool) -> Option<Screen> {
+    fn builder_hotkey(
+        &mut self,
+        keys: &input::Controls,
+        alt: bool,
+        gameplay: bool,
+    ) -> Option<Screen> {
         let modified = alt
             || ["Control", "Shift", "Super"]
                 .iter()
@@ -586,6 +594,7 @@ impl Viewer {
             Action::Placement | Action::PlacementConfig => return Some(Screen::Control),
             Action::Verifier => return Some(Screen::Verifier),
             Action::Materials => return Some(Screen::Materials),
+            _ if !gameplay => return None,
             Action::Render => {
                 self.render_all = !self.render_all;
                 self.dirty = true;
