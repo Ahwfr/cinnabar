@@ -36,6 +36,25 @@ pub fn encode_library(blueprints: &[Vec<u8>]) -> Result<Vec<u8>, String> {
     Ok(bytes)
 }
 
+/// A fresh import identity lets users restore deleted entries by importing again.
+pub fn encode_library_revision(blueprints: &[Vec<u8>], revision: u64) -> Result<Vec<u8>, String> {
+    let original = encode_library(blueprints)?;
+    let mut bytes = b"SCL2".to_vec();
+    bytes.extend(revision.to_le_bytes());
+    bytes.extend_from_slice(&original[4..]);
+    Ok(bytes)
+}
+
+pub fn library_revision(bytes: &[u8]) -> u64 {
+    if bytes.starts_with(b"SCL2") && bytes.len() >= 12 {
+        u64::from_le_bytes(bytes[4..12].try_into().unwrap())
+    } else {
+        bytes.iter().fold(0xcbf29ce484222325u64, |hash, byte| {
+            (hash ^ u64::from(*byte)).wrapping_mul(0x100000001b3)
+        })
+    }
+}
+
 pub fn library(mut bytes: &[u8]) -> Result<Vec<&[u8]>, String> {
     if bytes.is_empty() {
         return Ok(Vec::new());
@@ -43,8 +62,12 @@ pub fn library(mut bytes: &[u8]) -> Result<Vec<&[u8]>, String> {
     if bytes.starts_with(b"SCB1") {
         return Ok(vec![bytes]);
     }
-    if take(&mut bytes, 4)? != b"SCL1" {
-        return Err("invalid blueprint library".into());
+    match take(&mut bytes, 4)? {
+        b"SCL1" => {}
+        b"SCL2" => {
+            take(&mut bytes, 8)?;
+        }
+        _ => return Err("invalid blueprint library".into()),
     }
     let count = byte(&mut bytes)? as usize;
     if !(1..=MAX_LIBRARY).contains(&count) {

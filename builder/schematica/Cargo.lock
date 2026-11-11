@@ -934,7 +934,7 @@ checksum = "cf54715a573b99ac80df0bc206da022bcd442c974952c7b9720069370852e21f"
 
 [[package]]
 name = "schematica-builder"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "nucleation",
@@ -952,7 +952,7 @@ version = "0.1.0"
 
 [[package]]
 name = "schematica-guest"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "schematica-core",
  "serde_json",

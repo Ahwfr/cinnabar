@@ -5,7 +5,7 @@ on:
     branches: [builder-features]
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: builder-windows-${{ github.ref }}
@@ -134,6 +134,12 @@ jobs:
           path: builder-artifact/
           if-no-files-found: error
           retention-days: 14
+      - name: Publish the versioned Builder release
+        if: env.HEADLESS_TEST != 'true'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: ./builder/Publish-BuilderRelease.ps1 -PackageDirectory builder-artifact -Publish
       - name: Stage the headless test binaries
         if: env.HEADLESS_TEST == 'true'
         shell: pwsh

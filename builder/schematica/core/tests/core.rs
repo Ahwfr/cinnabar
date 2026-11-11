@@ -430,3 +430,15 @@ fn blueprint_roundtrip_keeps_typed_states_and_coordinates() {
     assert_eq!(decoded.block_count(), 1);
     assert!(blueprint::decode(&bytes[..bytes.len() - 1]).is_err());
 }
+#[test]
+fn library_revisions_keep_entries_and_accept_legacy_libraries() {
+    use schematica_core::{blueprint, Schematic};
+    let payload = blueprint::encode(&Schematic::new("fixture", [1; 3])).unwrap();
+    let entries = vec![payload.clone()];
+    let old = blueprint::encode_library(&entries).unwrap();
+    let new = blueprint::encode_library_revision(&entries, 42).unwrap();
+    assert_eq!(blueprint::library(&old).unwrap(), vec![payload.as_slice()]);
+    assert_eq!(blueprint::library(&new).unwrap(), vec![payload.as_slice()]);
+    assert_eq!(blueprint::library_revision(&new), 42);
+    assert!(blueprint::library(&new[..11]).is_err());
+}

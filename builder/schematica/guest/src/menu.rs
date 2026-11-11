@@ -23,17 +23,8 @@ pub enum Screen {
 }
 
 pub fn open(viewer: &Viewer, replace: bool) {
-    let template = match viewer.screen {
-        Screen::Main => MAIN,
-        Screen::Control => CONTROL,
-        Screen::Load => LOAD,
-        Screen::Settings => SETTINGS,
-        Screen::Materials => MATERIALS,
-        Screen::Verifier => VERIFIER,
-        Screen::Hotkeys => HOTKEYS,
-    };
-    let content = content(template, viewer.options.fullscreen_ui);
-    let result = panel::set_content(&content).and_then(|()| update(viewer));
+    let content = content(viewer.screen, viewer.options.fullscreen_ui);
+    let result = panel::set_content(content).and_then(|()| update(viewer));
     let result = if replace {
         result
     } else {
@@ -45,42 +36,18 @@ pub fn open(viewer: &Viewer, replace: bool) {
 }
 
 /// Uses the same hit-tested controls for a compact window or a viewport-filling layout.
-fn content(template: &str, fullscreen: bool) -> String {
-    if !fullscreen {
-        return template.to_owned();
-    }
-    let mut panel: Value = serde_json::from_str(template).unwrap();
-    let mut document: Value =
-        serde_json::from_str(panel["surface"]["document"].as_str().unwrap()).unwrap();
-    let card = &mut document["menu"]["controls"][0]["card"];
-    stretch(card, [396.0, 284.0]);
-    card["size"] = json!(["100%", "100%"]);
-    panel["surface"]["document"] = json!(document.to_string());
-    panel.to_string()
+fn content(screen: Screen, fullscreen: bool) -> &'static str {
+    let (compact, full) = match screen {
+        Screen::Main => (MAIN, include_str!("../ui/main-full.json")),
+        Screen::Load => (LOAD, include_str!("../ui/load-full.json")),
+        Screen::Control => (CONTROL, include_str!("../ui/control-full.json")),
+        Screen::Settings => (SETTINGS, include_str!("../ui/settings-full.json")),
+        Screen::Materials => (MATERIALS, include_str!("../ui/materials-full.json")),
+        Screen::Verifier => (VERIFIER, include_str!("../ui/verifier-full.json")),
+        Screen::Hotkeys => (HOTKEYS, include_str!("../ui/hotkeys-full.json")),
+    };
+    if fullscreen { full } else { compact }
 }
-
-fn stretch(node: &mut Value, parent: [f64; 2]) {
-    let own = [0, 1].map(|axis| node["size"][axis].as_f64().unwrap_or(parent[axis]));
-    for field in ["size", "offset"] {
-        if let Some(values) = node.get_mut(field).and_then(Value::as_array_mut) {
-            for (axis, value) in values.iter_mut().enumerate().take(2) {
-                if let Some(number) = value.as_f64() {
-                    *value = json!(format!("{}%", number * 100.0 / parent[axis]));
-                }
-            }
-        }
-    }
-    if let Some(controls) = node.get_mut("controls").and_then(Value::as_array_mut) {
-        for child in controls {
-            if let Some(children) = child.as_object_mut() {
-                for child in children.values_mut() {
-                    stretch(child, own);
-                }
-            }
-        }
-    }
-}
-
 pub fn refresh(viewer: &Viewer) {
     if let Err(e) = update(viewer) {
         label(&format!("Schematica panel: {e}"));
@@ -98,11 +65,15 @@ fn update(viewer: &Viewer) -> Result<(), String> {
     let revision = option_env!("SCHEMATICA_BUILD_REVISION").unwrap_or("local");
     out.insert(
         "#build".into(),
-        json!(format!("Builder {}", &revision[..revision.len().min(7)])),
+        json!(format!(
+            "v{} / {}",
+            env!("CARGO_PKG_VERSION"),
+            &revision[..revision.len().min(7)]
+        )),
     );
     let mut controls = Vec::new();
     match viewer.screen {
-        Screen::Main => {}
+        Screen::Main => crate::dashboard::bindings(viewer, &mut out),
         Screen::Control => {
             let origin = viewer.placement.map(|p| p.origin);
             let values = [
@@ -137,39 +108,7 @@ fn update(viewer: &Viewer) -> Result<(), String> {
                 json!(if viewer.rotate_ccw { "Down" } else { "Up" }),
             );
         }
-        Screen::Load => {
-            for index in 0..schematica_core::blueprint::MAX_LIBRARY {
-                let name = viewer.library.get(index);
-                out.insert(format!("#visible{index}"), json!(name.is_some()));
-                let selected = viewer.selected == Some(index);
-                let color = if selected {
-                    [0.10, 0.30, 0.31, 1.]
-                } else {
-                    [0.14, 0.20, 0.24, 1.]
-                };
-                out.insert(format!("#rowColor{index}"), json!(color));
-                out.insert(
-                    format!("#file{index}"),
-                    json!(name.map_or(String::new(), |name| short(name, 42))),
-                );
-            }
-            let selected = viewer.selected.and_then(|index| viewer.library.get(index));
-            out.insert(
-                "#selected".into(),
-                json!(selected.map_or_else(
-                    || format!("{} available", viewer.library.len()),
-                    |name| format!("Selected: {}", short(name, 26)),
-                )),
-            );
-            out.insert(
-                "#loadAction".into(),
-                json!(if selected.is_some() {
-                    "Load selected"
-                } else {
-                    "Select a blueprint"
-                }),
-            );
-        }
+        Screen::Load => crate::dashboard::bindings(viewer, &mut out),
         Screen::Settings => {
             out.insert(
                 "#ui-layout".into(),
@@ -263,9 +202,10 @@ fn materials(viewer: &Viewer, out: &mut Map<String, Value>) {
     let scanned = !viewer.dirty && viewer.tiles.iter().any(|tile| tile.stamp.is_some());
     for row in 0..ROWS {
         let line = viewer.materials.get(viewer.material_page * ROWS + row);
+        out.insert(format!("#materialIcon{row}"), material_icon(line));
         let name = line.map_or(String::new(), |line| {
             let name = line.name.strip_prefix("minecraft:").unwrap_or(&line.name);
-            short(&name.replace('_', " "), 26)
+            short(&name.replace('_', " "), 21)
         });
         let total = line.map_or(String::new(), |line| line.total.to_string());
         let counts = line.map_or_else(
@@ -291,6 +231,12 @@ fn materials(viewer: &Viewer, out: &mut Map<String, Value>) {
             out.insert(format!("#{column}{row}"), json!(count));
         }
     }
+}
+
+pub(super) fn material_icon(line: Option<&schematica_core::MaterialLine>) -> Value {
+    // The native item renderer supplies isometric block artwork; item-shaped
+    // materials retain their normal sprites. Unknown identifiers draw nothing.
+    json!({"item":{"identifier": line.map_or("minecraft:air", |line| line.name.as_str()), "metadata":0}})
 }
 
 fn verifier(viewer: &Viewer, out: &mut Map<String, Value>) {
@@ -360,7 +306,7 @@ mod tests {
     #[test]
     fn fullscreen_layout_keeps_the_same_controls() {
         let compact: Value = serde_json::from_str(SETTINGS).unwrap();
-        let full = content(SETTINGS, true);
+        let full = content(Screen::Settings, true);
         let full_panel: Value = serde_json::from_str(&full).unwrap();
         assert_eq!(compact["controls"], full_panel["controls"]);
         let document: Value =
@@ -387,7 +333,30 @@ mod tests {
             json!(["100%", "100%"])
         );
         if let Some(path) = std::env::var_os("SCHEMATICA_PANEL_REVIEW") {
-            std::fs::write(path, full).unwrap();
+            let mut panel: Value = serde_json::from_str(content(Screen::Main, true)).unwrap();
+            let mut bindings = Map::new();
+            crate::dashboard::bindings(&crate::tests::reference_viewer(), &mut bindings);
+            bindings.insert("#build".into(), json!("Builder preview"));
+            panel["surface"]["bindings"] = json!(bindings);
+            std::fs::write(path, panel.to_string()).unwrap();
+            let path =
+                std::path::PathBuf::from(std::env::var_os("SCHEMATICA_PANEL_REVIEW").unwrap());
+            for (screen, fullscreen, name) in [
+                (Screen::Materials, true, "materials-template.json"),
+                (Screen::Main, false, "compact-template.json"),
+            ] {
+                let mut panel: Value = serde_json::from_str(content(screen, fullscreen)).unwrap();
+                let mut bindings = Map::new();
+                let viewer = crate::tests::reference_viewer();
+                if screen == Screen::Materials {
+                    materials(&viewer, &mut bindings);
+                } else {
+                    crate::dashboard::bindings(&viewer, &mut bindings);
+                }
+                bindings.insert("#build".into(), json!("v0.3.0 / preview"));
+                panel["surface"]["bindings"] = json!(bindings);
+                std::fs::write(path.with_file_name(name), panel.to_string()).unwrap();
+            }
         }
     }
 }

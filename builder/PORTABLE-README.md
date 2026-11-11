@@ -12,6 +12,9 @@ Press **M** for the schematic menu. **Import schematics** opens Settings → Mod
 Press **Import schematics…**, choose your Java or Bedrock files, and return to the world.
 Enabled libraries reload automatically. Each import replaces the library selection and backs up the previous component.
 Original input files stay at their original paths.
+The red **Delete** button removes a schematic from the library and clears its active guide.
+Original files and recovery backups are preserved. Reimport to restore a removed entry.
+Materials show the native inventory artwork: isometric block textures or item sprites as appropriate.
 
 Edit the Schematica bindings in **Settings → Keyboard & Mouse**.
 Defaults are M for Menu, F6 for Settings, F7 for Placement, F8 for Verifier,

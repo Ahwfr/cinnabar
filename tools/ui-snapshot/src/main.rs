@@ -30,6 +30,8 @@ fn run() -> Result<(), String> {
     let mut dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../.local/assets/compiled");
     let mut list = false;
     let mut panel = None;
+    let mut panel_pointer = None;
+    let mut panel_pressed = false;
     let mut resource_pack = None;
     let mut size = [1280u32, 720u32];
     let mut gui_scale = 2u8;
@@ -47,6 +49,21 @@ fn run() -> Result<(), String> {
                     args.next().ok_or("--panel requires a JSON path")?,
                 ))
             }
+            "--pointer" => {
+                let mut point = [0.0f32; 2];
+                for axis in &mut point {
+                    *axis = args
+                        .next()
+                        .ok_or("--pointer requires X Y pixels")?
+                        .parse()
+                        .map_err(|_| "invalid panel pointer position")?;
+                    if !axis.is_finite() {
+                        return Err("panel pointer must be finite".into());
+                    }
+                }
+                panel_pointer = Some(point);
+            }
+            "--pressed" => panel_pressed = true,
             "--width" => {
                 size[0] = args
                     .next()
@@ -89,7 +106,7 @@ fn run() -> Result<(), String> {
             }
             "--help" | "-h" => {
                 println!(
-                    "ui-snapshot --list | (--state NAME | --panel JSON) --out PNG [--carriers DIR] [--resource-pack DIR] [--width PX --height PX --gui-scale SCALE --time SECONDS]"
+                    "ui-snapshot --list | (--state NAME | --panel JSON) --out PNG [--carriers DIR] [--resource-pack DIR] [--width PX --height PX --gui-scale SCALE --time SECONDS] [--pointer X Y --pressed]"
                 );
                 return Ok(());
             }
@@ -104,6 +121,12 @@ fn run() -> Result<(), String> {
             );
         }
         return Ok(());
+    }
+    if (panel_pointer.is_some() || panel_pressed) && panel.is_none() {
+        return Err("--pointer and --pressed require --panel".into());
+    }
+    if panel_pressed && panel_pointer.is_none() {
+        return Err("--pressed requires --pointer X Y".into());
     }
     if panel.is_some() && name.is_some() {
         return Err("--panel and --state are mutually exclusive".into());
@@ -138,6 +161,7 @@ fn run() -> Result<(), String> {
             .map_err(|error| format!("{}: {error}", path.display()))?;
         render::panel_png(
             panel,
+            panel_pointer.map(|position| (position, panel_pressed)),
             size,
             gui_scale,
             seconds,

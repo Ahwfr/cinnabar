@@ -4,8 +4,11 @@ wit_bindgen::generate!({
     generate_all,
 });
 
+mod actions;
 mod air_place;
+mod dashboard;
 mod hotkeys;
+mod library;
 mod menu;
 mod native_bindings;
 mod overlay;
@@ -27,6 +30,15 @@ static GUEST_REVISION: [u8; BUILD_REVISION.len()] = {
     bytes
 };
 
+#[cfg(target_arch = "wasm32")]
+#[used]
+#[unsafe(link_section = "schematica:build-version")]
+static GUEST_VERSION: [u8; env!("CARGO_PKG_VERSION").len()] = {
+    let mut bytes = [0; env!("CARGO_PKG_VERSION").len()];
+    bytes.copy_from_slice(env!("CARGO_PKG_VERSION").as_bytes());
+    bytes
+};
+
 use cinnabar::{
     extension::{budget, gameplay, hud, input, item_use, panel, settings, terrain},
     world_draw::drawing,
@@ -37,8 +49,8 @@ use schematica_core::{LayerMode, MaterialLine, Mirror, Placement, Schematic, blu
 use std::{cell::RefCell, collections::BTreeMap, f32::consts::TAU};
 
 thread_local! {
-    static RUNTIME: RefCell<(Runtime, Vec<&'static [u8]>, Options)> =
-        const { RefCell::new((Runtime::Start, Vec::new(), Options { textured: true, assist: false, fast_place: false, correct_aim: false, fullscreen_ui: true, air_place: false, opacity: 65, hotkeys: BTreeMap::new() })) };
+    static RUNTIME: RefCell<(Runtime, Vec<&'static [u8]>, Options, Option<usize>)> =
+        const { RefCell::new((Runtime::Start, Vec::new(), Options { textured: true, assist: false, fast_place: false, correct_aim: false, fullscreen_ui: true, air_place: false, opacity: 65, hotkeys: BTreeMap::new(), library_revision: 0, deleted_entries: Vec::new() }, None)) };
 }
 
 #[derive(Clone)]
@@ -51,16 +63,20 @@ struct Options {
     air_place: bool,
     opacity: u8,
     hotkeys: BTreeMap<usize, String>,
+    library_revision: u64,
+    deleted_entries: Vec<usize>,
 }
 
 impl Options {
     fn save(&self) {
+        #[cfg(not(test))]
         let _ = settings::save(
             &serde_json::json!({
                 "textured":self.textured, "assist":self.assist, "fast_place": self.fast_place,
                 "correct_aim": self.correct_aim,
                 "fullscreen_ui": self.fullscreen_ui, "air_place": self.air_place,
                 "opacity": self.opacity, "hotkeys": self.hotkeys,
+                "library_revision": self.library_revision, "deleted_entries": self.deleted_entries,
             })
             .to_string(),
         );
@@ -100,6 +116,16 @@ impl Guest for Schematica {
                     .unwrap_or(options.correct_aim);
                 options.fullscreen_ui = value["fullscreen_ui"].as_bool().unwrap_or(true);
                 options.air_place = value["air_place"].as_bool().unwrap_or(false);
+                options.library_revision = value["library_revision"].as_u64().unwrap_or(0);
+                options.deleted_entries = value["deleted_entries"]
+                    .as_array()
+                    .into_iter()
+                    .flatten()
+                    .filter_map(|entry| entry.as_u64())
+                    .filter(|index| *index < blueprint::MAX_LIBRARY as u64)
+                    .map(|index| index as usize)
+                    .take(blueprint::MAX_LIBRARY)
+                    .collect();
                 if let Some(opacity) = value["opacity"].as_u64() {
                     options.opacity = opacity.clamp(25, 90) as u8;
                 }
@@ -117,13 +143,14 @@ impl Guest for Schematica {
 
     fn frame() {
         RUNTIME.with(|runtime| {
-            let (runtime, catalog, options) = &mut *runtime.borrow_mut();
+            let (runtime, catalog, options, active_entry) = &mut *runtime.borrow_mut();
             if matches!(*runtime, Runtime::Start) {
                 static SLOT: [u8; blueprint::SLOT_BYTES] = blueprint::empty_slot();
                 let bytes = std::hint::black_box(&SLOT).as_slice();
                 let bytes = blueprint::embedded_payload(bytes).unwrap_or_default();
                 match blueprint::library(bytes) {
                     Ok(entries) => {
+                        options.select_library(blueprint::library_revision(bytes));
                         *catalog = entries;
                         *runtime = Runtime::Ready(Viewer::new(
                             Schematic::new("No schematic loaded", [1; 3]),
@@ -141,6 +168,7 @@ impl Guest for Schematica {
                     if let Some(index) = viewer.request {
                         if viewer.release_for_switch() {
                             *options = viewer.options.clone();
+                            *active_entry = Some(index);
                             match blueprint::Decoder::new(catalog[index]) {
                                 Ok(decoder) => *runtime = Runtime::Loading(decoder),
                                 Err(_) => invalidate(runtime),
@@ -230,13 +258,15 @@ impl Guest for Schematica {
                         })
                         .collect();
                     materials.sort_by_key(|line| std::cmp::Reverse(line.total));
-                    *runtime = Runtime::Ready(Viewer::new(
+                    let mut viewer = Viewer::new(
                         schematic,
                         materials,
                         library_names(catalog),
                         options.clone(),
                         true,
-                    ));
+                    );
+                    viewer.active_entry = *active_entry;
+                    *runtime = Runtime::Ready(viewer);
                     label(&options.menu_hint("Schematica"));
                 }
                 Runtime::Invalid => {}
@@ -293,6 +323,7 @@ struct Viewer {
     screen: Screen,
     library: Vec<String>,
     selected: Option<usize>,
+    active_entry: Option<usize>,
     request: Option<usize>,
     loaded: bool,
     auto_place: bool,
@@ -333,9 +364,10 @@ impl Viewer {
             verifier_marker: None,
             verifier_target: None,
             verifier_marker_changed: false,
-            screen: Screen::Control,
+            screen: Screen::Main,
             library,
             selected: None,
+            active_entry: None,
             request: None,
             loaded,
             auto_place: loaded,
@@ -417,6 +449,10 @@ impl Viewer {
             for event in keys.events {
                 self.menu_action(&event.id);
                 changed = true;
+            }
+            if self.request.is_some() {
+                let _ = panel::close();
+                return;
             }
             if old != self.screen {
                 menu::open(self, true);
@@ -713,226 +749,6 @@ impl Viewer {
             }
         }
         None
-    }
-
-    fn menu_action(&mut self, id: &str) {
-        if let Some(row) = id
-            .strip_prefix("verify-row-")
-            .and_then(|value| value.parse::<usize>().ok())
-        {
-            if row < menu::ROWS && !self.dirty {
-                let index = self.verifier_page * menu::ROWS + row;
-                let cell = self.mismatches().nth(index).map(|&(cell, _)| cell);
-                if let Some(cell) = cell {
-                    self.verifier_target = Some(cell);
-                    self.verifier_marker_changed = true;
-                    let _ = panel::close();
-                }
-            }
-            return;
-        }
-        if let Some(index) = id
-            .strip_prefix("select-")
-            .and_then(|value| value.parse::<usize>().ok())
-        {
-            if index < self.library.len() {
-                self.selected = Some(index);
-            }
-            return;
-        }
-        let key = match id {
-            "main" => {
-                self.screen = Screen::Main;
-                return;
-            }
-            "hotkeys" => {
-                let _ = panel::open_settings("keyboard_and_mouse_forced_index");
-                return;
-            }
-            "import" => {
-                let _ = panel::open_settings("cinnabar_mods_index");
-                return;
-            }
-            "reset-hotkeys" => {
-                self.options.hotkeys.clear();
-                self.options.save();
-                return;
-            }
-            "verifier" => {
-                self.screen = Screen::Verifier;
-                self.verifier_page = 0;
-                return;
-            }
-            "lock" => {
-                if self.placement.is_some() {
-                    self.locked = !self.locked;
-                }
-                return;
-            }
-            "opacity" => {
-                self.options.opacity = match self.options.opacity {
-                    0..=25 => 45,
-                    26..=45 => 65,
-                    46..=65 => 90,
-                    _ => 25,
-                };
-                self.options.save();
-                self.dirty = true;
-                return;
-            }
-            "verify-previous" => {
-                self.verifier_page = self.verifier_page.saturating_sub(1);
-                return;
-            }
-            "verify-next" => {
-                self.verifier_page = (self.verifier_page + 1)
-                    .min(self.mismatch_count().div_ceil(menu::ROWS).saturating_sub(1));
-                return;
-            }
-            "verify-clear" => {
-                self.verifier_target = None;
-                self.verifier_marker_changed = true;
-                return;
-            }
-            "place" => {
-                self.dirty |= self.move_here();
-                return;
-            }
-            "load" => {
-                if let Some(index) = self.selected {
-                    self.request = Some(index);
-                    let _ = panel::close();
-                    label("Schematica | Loading selected blueprint");
-                }
-                return;
-            }
-            "library" => {
-                self.screen = Screen::Load;
-                self.selected = None;
-                return;
-            }
-            "settings" => {
-                self.screen = Screen::Settings;
-                return;
-            }
-            "assist" => {
-                self.options.assist = !self.options.assist;
-                self.options.save();
-                return;
-            }
-            "fast-place" => {
-                self.options.fast_place = !self.options.fast_place;
-                self.options.save();
-                return;
-            }
-            "correct-aim" => {
-                self.options.correct_aim = !self.options.correct_aim;
-                self.options.save();
-                return;
-            }
-            "ui-layout" => {
-                self.options.fullscreen_ui = !self.options.fullscreen_ui;
-                self.options.save();
-                menu::open(self, true);
-                return;
-            }
-            "air-place" => {
-                self.options.air_place = !self.options.air_place;
-                self.options.save();
-                if self.options.air_place
-                    && !cinnabar::extension::permissions::read()
-                        .iter()
-                        .any(|permission| permission.name == "commands" && permission.granted)
-                {
-                    let _ = panel::open_settings("cinnabar_mods_index");
-                }
-                return;
-            }
-            "unload" => {
-                if self.locked {
-                    return;
-                }
-                self.placement = None;
-                self.dirty = true;
-                let _ = panel::close();
-                return;
-            }
-            "materials" => {
-                self.screen = Screen::Materials;
-                self.material_page = 0;
-                return;
-            }
-            "back" => {
-                self.screen = Screen::Control;
-                return;
-            }
-            "sort" => {
-                self.sort_name = !self.sort_name;
-                if self.sort_name {
-                    self.materials.sort_by(|a, b| a.name.cmp(&b.name));
-                } else {
-                    self.materials
-                        .sort_by(|a, b| b.total.cmp(&a.total).then_with(|| a.name.cmp(&b.name)));
-                }
-                self.material_page = 0;
-                return;
-            }
-            "flip-axis" => {
-                self.flip_z = !self.flip_z;
-                return;
-            }
-            "rotate-axis" => {
-                self.rotate_ccw = !self.rotate_ccw;
-                return;
-            }
-            "rotate" if self.rotate_ccw => "RotateLeft",
-            "rotate" => "KeyR",
-            "cw" => "KeyR",
-            "ccw" => "RotateLeft",
-            "mirror" => {
-                if !self.locked
-                    && let Some(p) = &mut self.placement
-                {
-                    // The button's axis is in world space. The core mirrors
-                    // before rotating, so swap local axes on odd turns.
-                    let flip = if self.flip_z ^ (p.quarter_turns % 2 != 0) {
-                        Mirror::Z
-                    } else {
-                        Mirror::X
-                    };
-                    if p.mirror == Mirror::None {
-                        p.mirror = flip;
-                    } else {
-                        if p.mirror != flip {
-                            p.quarter_turns = (p.quarter_turns + 2) % 4;
-                        }
-                        p.mirror = Mirror::None;
-                    }
-                    self.dirty = true;
-                }
-                return;
-            }
-            "mode" => "KeyL",
-            "previous-layer" => "BracketLeft",
-            "next-layer" => "BracketRight",
-            "visibility" => "KeyH",
-            "look" => "KeyB",
-            "previous-page" => {
-                self.material_page = self.material_page.saturating_sub(1);
-                return;
-            }
-            "next-page" => {
-                let last = self.materials.len().div_ceil(menu::ROWS).saturating_sub(1);
-                self.material_page = (self.material_page + 1).min(last);
-                return;
-            }
-            "close" => {
-                let _ = panel::close();
-                return;
-            }
-            _ => return,
-        };
-        self.dirty |= self.control(key);
     }
 
     fn layers(&self) -> LayerMode {

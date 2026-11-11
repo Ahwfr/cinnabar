@@ -19,6 +19,7 @@ mod edit_selection;
 mod form_overlap;
 #[cfg(feature = "test-support")]
 mod menu_keyboard;
+mod panel_items;
 mod panorama;
 mod saturation_overlap;
 #[cfg(feature = "test-support")]
@@ -98,12 +99,13 @@ pub fn png_at(
     seconds: f64,
     resource_pack: Option<&Path>,
 ) -> Result<Vec<u8>, Error> {
-    png_fixture(state, (state.fixture)(), dir, seconds, resource_pack)
+    png_fixture(state, (state.fixture)(), dir, seconds, resource_pack, None)
 }
 
 /// Renders an authored panel at an explicit animation sample without creating a window.
 pub fn panel_png(
     panel: ui::mod_panel::Panel,
+    pointer: Option<([f32; 2], bool)>,
     size: [u32; 2],
     gui_scale: u8,
     seconds: f64,
@@ -123,6 +125,7 @@ pub fn panel_png(
         dir,
         seconds,
         resource_pack,
+        pointer,
     )
 }
 
@@ -133,6 +136,7 @@ fn png_fixture(
     dir: &Path,
     seconds: f64,
     resource_pack: Option<&Path>,
+    pointer: Option<([f32; 2], bool)>,
 ) -> Result<Vec<u8>, Error> {
     #[cfg(feature = "test-support")]
     if let Fixture::ArmorTrims { trimmed } = &fixture {
@@ -358,6 +362,7 @@ fn png_fixture(
             add_server_pages(&mut engine, &mut carriers.pages);
         }
         Fixture::ModPanel(panel, hud, identity) => {
+            let icons = panel_items::load(&panel, dir, &mut carriers.pages)?;
             let mut engine = json_engine(&carriers)?;
             if let Some(root) = resource_pack {
                 let files = panel_textures(&panel, root)?;
@@ -390,11 +395,20 @@ fn png_fixture(
             }
             ui.set_mod_panel(mod_ui::PanelUiOwner::Environment(0), Some(&panel))?;
             ui.set_mod_panel_open(true);
-            for now in [0.0, seconds] {
+            for (index, now) in [0.0, 0.0, seconds].into_iter().enumerate() {
+                if index == 1
+                    && let Some((position, pressed)) = pointer
+                {
+                    ui.mod_panel_events(position, pressed, pressed);
+                }
                 frame.nodes.clear();
                 *frame.next = 1;
                 frame.now = now;
-                ui.paint_mod_panel(Some(&engine), &mut frame);
+                ui.paint_mod_panel_with_icons(
+                    Some(&engine),
+                    &mut frame,
+                    &|identifier, metadata| icons.get(&(identifier.into(), metadata)).copied(),
+                );
                 engine.poll_native_images();
             }
             add_server_pages(&mut engine, &mut carriers.pages);

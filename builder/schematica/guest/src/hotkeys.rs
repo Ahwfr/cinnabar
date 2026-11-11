@@ -1,3 +1,4 @@
+#[cfg(test)]
 use crate::input;
 use std::collections::BTreeMap;
 

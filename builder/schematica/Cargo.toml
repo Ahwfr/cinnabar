@@ -3,6 +3,9 @@ members = ["core", "guest", "builder"]
 default-members = ["core", "builder"]
 resolver = "3"
 
+[workspace.package]
+version = "0.3.0"
+
 [profile.release]
 opt-level = 3
 lto = "thin"

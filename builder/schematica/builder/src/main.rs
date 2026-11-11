@@ -132,7 +132,11 @@ fn write_library(inputs: &[PathBuf], output: &Path, include_demo: bool) -> Resul
             import::import(input).with_context(|| format!("import {}", input.display()))?;
         entries.push(encode_blueprint(&schematic)?);
     }
-    let payload = blueprint::encode_library(&entries).map_err(anyhow::Error::msg)?;
+    let revision = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)?
+        .as_nanos() as u64;
+    let payload =
+        blueprint::encode_library_revision(&entries, revision).map_err(anyhow::Error::msg)?;
     let core = populate_template(&template, &payload)?;
     let component = component(&core)?;
     let mut file = fs::OpenOptions::new()
@@ -226,8 +230,9 @@ mod tests {
 }
 
 fn component(core: &[u8]) -> Result<Vec<u8>> {
+    let build_version = guest_version(core)?.unwrap_or("legacy");
     let name = match guest_revision(core)? {
-        Some(revision) => format!("Schematica Builder [{}]", &revision[..7]),
+        Some(revision) => format!("Schematica Builder v{build_version} [{}]", &revision[..7]),
         None => "Schematica Builder [unstamped]".to_owned(),
     };
     let mut component = wit_component::ComponentEncoder::default()
@@ -245,7 +250,7 @@ fn component(core: &[u8]) -> Result<Vec<u8>> {
     component.push(0);
     names.encode(&mut component);
     if let Some(revision) = guest_revision(core)? {
-        let version = format!("0.2.0+{}", &revision[..7]);
+        let version = format!("{build_version}+{}", &revision[..7]);
         component.push(0);
         CustomSection {
             name: Cow::Borrowed("version"),
@@ -254,6 +259,26 @@ fn component(core: &[u8]) -> Result<Vec<u8>> {
         .encode(&mut component);
     }
     Ok(component)
+}
+
+fn guest_version(core: &[u8]) -> Result<Option<&str>> {
+    for section in wasmparser::Parser::new(0).parse_all(core) {
+        if let wasmparser::Payload::CustomSection(section) = section?
+            && section.name() == "schematica:build-version"
+        {
+            let version = std::str::from_utf8(section.data())?;
+            let parts: Vec<_> = version.split('.').collect();
+            ensure!(
+                parts.len() == 3
+                    && parts
+                        .iter()
+                        .all(|part| !part.is_empty() && part.bytes().all(|ch| ch.is_ascii_digit())),
+                "invalid guest release version"
+            );
+            return Ok(Some(version));
+        }
+    }
+    Ok(None)
 }
 
 /// Reads the build stamp from the guest template, independent of the importer's version.
