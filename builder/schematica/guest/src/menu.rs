@@ -22,15 +22,18 @@ pub enum Screen {
     Hotkeys,
 }
 
-pub fn open(viewer: &Viewer, replace: bool) {
+pub fn prepare(viewer: &Viewer) -> bool {
     let content = content(viewer.screen, viewer.options.fullscreen_ui);
     let result = panel::set_content(content).and_then(|()| update(viewer));
-    let result = if replace {
-        result
-    } else {
-        result.and_then(|()| panel::open())
-    };
     if let Err(e) = result {
+        label(&format!("Schematica panel: {e}"));
+        return false;
+    }
+    true
+}
+
+pub fn request_open() {
+    if let Err(e) = panel::open() {
         label(&format!("Schematica panel: {e}"));
     }
 }

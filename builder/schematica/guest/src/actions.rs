@@ -160,7 +160,7 @@ impl Viewer {
             "ui-layout" => {
                 self.options.fullscreen_ui = !self.options.fullscreen_ui;
                 self.options.save();
-                menu::open(self, true);
+                menu::prepare(self);
                 return;
             }
             "air-place" => {

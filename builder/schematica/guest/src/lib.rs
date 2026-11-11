@@ -314,6 +314,7 @@ struct Viewer {
     render_all: bool,
     locked: bool,
     menu_armed: bool,
+    pending_menu_open: u8,
     options: Options,
     material_page: usize,
     verifier_page: usize,
@@ -358,6 +359,7 @@ impl Viewer {
             render_all: true,
             locked: false,
             menu_armed: false,
+            pending_menu_open: 0,
             options,
             material_page: 0,
             verifier_page: 0,
@@ -406,11 +408,20 @@ impl Viewer {
             label("Schematica | Grant controls access in Settings > Mods.");
             return;
         };
-        native_bindings::sample();
         if !keys.focused {
             self.menu_armed = false;
+            self.pending_menu_open = 0;
             return;
         }
+        if keys.panel_open || keys.keys_pressed.iter().any(|key| key == "Escape") {
+            self.pending_menu_open = 0;
+        }
+        if self.pending_menu_open > 0 {
+            self.pending_menu_open -= 1;
+            menu::request_open();
+            return;
+        }
+        native_bindings::sample();
         let alt = keys
             .keys_held
             .iter()
@@ -455,7 +466,7 @@ impl Viewer {
                 return;
             }
             if old != self.screen {
-                menu::open(self, true);
+                menu::prepare(self);
             } else if changed {
                 menu::refresh(self);
             }
@@ -469,7 +480,9 @@ impl Viewer {
             self.selected = None;
             self.verifier_page = 0;
             self.material_page = 0;
-            menu::open(self, false);
+            if menu::prepare(self) {
+                self.pending_menu_open = 4;
+            }
             return;
         }
         if !gameplay {
