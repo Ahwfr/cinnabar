@@ -32,6 +32,7 @@ function Button-Face($text,$w,$h,$fill,$pressed,$colorBinding,$subtitle) {
     $captionInk=if($fill[0] -gt 0.6 -and $fill[1] -gt 0.6){@(0.08,0.08,0.08,1)}else{$ink}
     $top=[double[]]@([Math]::Min(1.0,$fill[0]+0.13),[Math]::Min(1.0,$fill[1]+0.13),[Math]::Min(1.0,$fill[2]+0.13),1)
     $shade=[double[]]@(($fill[0]*0.5),($fill[1]*0.5),($fill[2]*0.5),1)
+    if($pressed){$top=$shade}
     $face=New-Rect 1 (1+$drop) ($w-2) ($h-1-$depth-$drop) $fill
     if($colorBinding){$face.bindings=@(@{binding_name=$colorBinding;binding_name_override='#color'})}
     $align=if($subtitle){'left'}else{'center'}
@@ -42,7 +43,10 @@ function Button-Face($text,$w,$h,$fill,$pressed,$colorBinding,$subtitle) {
     $children=@(
         @{cover=(New-Rect 0 0 $w $h $border)},
         @{bottom=(New-Rect 1 ($h-$depth) ($w-2) $depth $shade)},
-        @{face=$face},
+        @{face=$face}
+    )
+    if($pressed){$children+=@{shade=(New-Rect 1 (1+$drop) ($w-2) ($h-1-$depth-$drop) @(0,0,0,0.18))}}
+    $children+=@(
         @{top=(New-Rect 1 (1+$drop) ($w-2) 1 $top)},
         @{left=(New-Rect 1 (1+$drop) 1 ($h-1-$depth-$drop) $top)},
         @{caption=$caption}
@@ -86,10 +90,14 @@ function Add-Button($id,$text,$x,$y,$w,$h=20,$fill=$buttonFill,$field=$false,$co
         $outline.border_color=@(1,1,1,1)
         $outline.border_width=1
         $outline.bindings=$fade
-        $node.controls+=@{outline=$outline}
-        $wash=New-Rect 1 1 ($w-2) ($h-4) @(1,1,1,0.12)
+        $wash=New-Rect 1 1 ($w-2) ($h-4) @(1,1,1,0.06)
         $wash.bindings=$fade
-        $node.controls+=@{wash=$wash}
+        # Feedback belongs exclusively to hover; the native pressed state masks it.
+        $node.controls[2]=@{hover=($origin+@{type='panel';size=@($w,$h);controls=@(
+            @{("face@schematica.$faceName")=@{}},
+            @{outline=$outline},
+            @{wash=$wash}
+        )})}
     }
     if($visibleBinding){ $node.bindings=@(@{binding_name=$visibleBinding;binding_name_override='#visible'}) }
     if($enabledBinding){ $node.bindings+=@(@{binding_name=$enabledBinding;binding_name_override='#enabled'}) }
