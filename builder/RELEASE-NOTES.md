@@ -1,6 +1,7 @@
 # Cinnabar Builder 0.3.0
 
 - Added a portable Cinnabar Builder.exe entry point with a persistent profile and first-run asset preparation.
+- Grouped support files under App so the play folder has one obvious executable.
 - Added in-game schematic importing through the native Mods page, with library backups and enabled-mod reload.
 - Added a browser layout with a schematic list, placement controls, build details and material preview.
 - Added beveled buttons with eased hover feedback and a depressed pressed state.

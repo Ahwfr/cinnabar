@@ -10,9 +10,20 @@ use std::{
 
 /// Resolves the matching template supplied by this release, never another checkout.
 pub fn template() -> Result<Vec<u8>> {
+    let root = env::current_exe()?
+        .parent()
+        .context("launcher folder")?
+        .to_path_buf();
+    let packaged = root.join("App/schematica-guest-template.bin");
     let path = env::var_os("SCHEMATICA_GUEST_TEMPLATE")
         .map(PathBuf::from)
-        .unwrap_or(env::current_exe()?.with_file_name("schematica-guest-template.bin"));
+        .unwrap_or_else(|| {
+            if packaged.is_file() {
+                packaged
+            } else {
+                root.join("schematica-guest-template.bin")
+            }
+        });
     fs::read(&path).with_context(|| format!("Read the guest template at {}", path.display()))
 }
 
@@ -121,15 +132,20 @@ pub fn import_dialog(mods: &Path) -> Result<()> {
 
 #[cfg(windows)]
 pub fn start(root: &Path) -> Result<()> {
-    let client = root.join("runtime/cinnabar.exe");
+    let package = if root.join("App").is_dir() {
+        root.join("App")
+    } else {
+        root.to_path_buf()
+    };
+    let client = package.join("runtime/cinnabar.exe");
     ensure!(
         client.is_file(),
-        "Keep Cinnabar Builder.exe with the runtime folder from the same download."
+        "Keep Cinnabar Builder.exe with the App folder from the same download."
     );
-    let template_path = root.join("schematica-guest-template.bin");
+    let template_path = package.join("schematica-guest-template.bin");
     let template =
         fs::read(&template_path).context("Read this release's Schematica guest template")?;
-    let revision = fs::read_to_string(root.join("builder-commit.txt"))?;
+    let revision = fs::read_to_string(package.join("builder-commit.txt"))?;
     ensure!(
         super::guest_revision(&template)? == Some(revision.trim()),
         "The launcher package and guest template belong to different builds. Extract the complete release ZIP."
@@ -149,7 +165,7 @@ pub fn start(root: &Path) -> Result<()> {
     publish(&mods, &bytes)?;
     registration(&profile, &installed)?;
     std::process::Command::new(client)
-        .current_dir(root.join("runtime"))
+        .current_dir(package.join("runtime"))
         .env("CINNABAR_USER_ROOT", &profile)
         .env("CINNABAR_SCHEMATICA_IMPORTER", env::current_exe()?)
         .env("SCHEMATICA_GUEST_TEMPLATE", template_path)

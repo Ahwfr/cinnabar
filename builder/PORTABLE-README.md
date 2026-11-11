@@ -1,7 +1,7 @@
 # Cinnabar Builder
 
 Extract the whole ZIP into a folder you can write to. Open **Cinnabar Builder.exe**.
-Keep the runtime folder and guest template beside it. The first launch prepares Minecraft assets.
+Keep the **App/** folder beside it. It contains the required runtime, importer template and documentation. The first launch prepares Minecraft assets.
 
 Your worlds, login, options and schematic library live in **profile/**.
 For an update, close Builder and extract the new ZIP into the same folder.
