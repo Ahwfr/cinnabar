@@ -120,6 +120,10 @@ jobs:
           Copy-Item -LiteralPath 'target/builder-importer/release/schematica-builder.exe' -Destination 'builder-artifact/Cinnabar Builder.exe'
           Copy-Item -LiteralPath 'target/builder-importer/wasm32-unknown-unknown/release/schematica_guest.wasm' -Destination 'builder-artifact/schematica-guest-template.bin'
           ./packaging/windows/stage-prep-kit.ps1 -Root $PWD -Kit "$release/resources/prep-kit" -Assetc "$release/assetc.exe"
+          New-Item -ItemType Directory -Force -Path "$release/resources/fonts", "$release/resources/assets" | Out-Null
+          $font = Get-Content -Raw 'assets/cinnangles-sans-source.json' | ConvertFrom-Json
+          Copy-Item -LiteralPath "assets/fonts/$($font.font_file)" -Destination "$release/resources/fonts"
+          Copy-Item -LiteralPath 'crates/assets/data/block-physics-v2225.bin' -Destination "$release/resources/assets"
           Copy-Item -LiteralPath 'LICENSE', 'THIRD_PARTY_NOTICES.md' -Destination 'builder-artifact'
           Copy-Item -LiteralPath 'builder/schematica/SCHEMATICA-LICENSE.txt' -Destination 'builder-artifact'
           Copy-Item -LiteralPath 'assets/licenses' -Destination 'builder-artifact' -Recurse
@@ -127,19 +131,21 @@ jobs:
           Copy-Item -LiteralPath 'builder/PORTABLE-README.md' -Destination 'builder-artifact/README.md'
           git archive --format=zip --output=builder-artifact/Builder-Source.zip HEAD
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
-      - uses: actions/upload-artifact@v7
-        if: env.HEADLESS_TEST != 'true'
-        with:
-          name: cinnabar-builder-windows-x64
-          path: builder-artifact/
-          if-no-files-found: error
-          retention-days: 14
       - name: Publish the versioned Builder release
         if: env.HEADLESS_TEST != 'true'
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
         run: ./builder/Publish-BuilderRelease.ps1 -PackageDirectory builder-artifact -Publish
+      - uses: actions/upload-artifact@v7
+        if: env.HEADLESS_TEST != 'true'
+        with:
+          name: cinnabar-builder-windows-x64
+          path: |
+            builder-artifact/Cinnabar Builder.exe
+            builder-artifact/App/
+          if-no-files-found: error
+          retention-days: 14
       - name: Stage the headless test binaries
         if: env.HEADLESS_TEST == 'true'
         shell: pwsh
