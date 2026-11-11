@@ -9,6 +9,7 @@ pub mod port;
 #[cfg(test)]
 mod publication_tests;
 pub mod scan;
+mod schematics;
 #[cfg(test)]
 pub(crate) mod tests;
 pub mod update;

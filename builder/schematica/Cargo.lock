@@ -939,6 +939,7 @@ dependencies = [
  "anyhow",
  "nucleation",
  "schematica-core",
+ "serde_json",
  "wasm-encoder",
  "wasmparser",
  "windows-sys 0.61.2",

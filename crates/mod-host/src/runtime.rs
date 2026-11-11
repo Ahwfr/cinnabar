@@ -896,6 +896,14 @@ impl Instance {
     pub(super) fn take_interaction(&mut self) -> crate::InteractionOutput {
         std::mem::take(&mut self.store.data_mut().controls.interaction)
     }
+    pub(super) fn take_client_settings(&mut self) -> Option<String> {
+        self.store
+            .data_mut()
+            .controls
+            .interaction
+            .client_settings
+            .take()
+    }
     pub(super) fn settings_write(&self) -> Option<&str> {
         self.store.data().controls.dirty_settings.as_deref()
     }

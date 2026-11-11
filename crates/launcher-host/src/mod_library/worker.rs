@@ -92,7 +92,10 @@ pub fn run<B: Backend>(
                 }
             }
             Ok(Command::Action(action)) => {
-                if matches!(action, Action::Import | Action::Remove(_)) {
+                if matches!(
+                    action,
+                    Action::Import | Action::ImportSchematics | Action::Remove(_)
+                ) {
                     library.busy = true;
                     let _ = outgoing.send(library.clone());
                 }
@@ -173,6 +176,15 @@ pub fn perform<B: Backend>(
         format!("settings-{}-{}", std::process::id(), *requests)
     };
     match action {
+        Action::ImportSchematics => {
+            let imported = super::schematics::import(mods)?;
+            if imported {
+                B::apply(Action::ReloadAll, registration, None, request())?;
+                Ok("Schematic library imported. Enabled libraries are reloading. Open Schematica to select a blueprint.".into())
+            } else {
+                Ok(String::new())
+            }
+        }
         Action::Import => match pick() {
             Ok(Some(source)) => {
                 import::<B>(mods, source.as_ref()).map(|name| format!("Imported {name}."))

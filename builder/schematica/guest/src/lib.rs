@@ -4,9 +4,12 @@ wit_bindgen::generate!({
     generate_all,
 });
 
+mod air_place;
 mod hotkeys;
 mod menu;
+mod native_bindings;
 mod overlay;
+mod status;
 
 // Embed the revision in the guest itself so the importer labels the code it actually packages.
 #[cfg(target_arch = "wasm32")]
@@ -35,7 +38,7 @@ use std::{cell::RefCell, collections::BTreeMap, f32::consts::TAU};
 
 thread_local! {
     static RUNTIME: RefCell<(Runtime, Vec<&'static [u8]>, Options)> =
-        const { RefCell::new((Runtime::Start, Vec::new(), Options { textured: true, assist: false, fast_place: false, correct_aim: false, opacity: 65, hotkeys: BTreeMap::new() })) };
+        const { RefCell::new((Runtime::Start, Vec::new(), Options { textured: true, assist: false, fast_place: false, correct_aim: false, fullscreen_ui: true, air_place: false, opacity: 65, hotkeys: BTreeMap::new() })) };
 }
 
 #[derive(Clone)]
@@ -44,32 +47,19 @@ struct Options {
     assist: bool,
     fast_place: bool,
     correct_aim: bool,
+    fullscreen_ui: bool,
+    air_place: bool,
     opacity: u8,
     hotkeys: BTreeMap<usize, String>,
 }
 
 impl Options {
-    fn menu_hint(&self, title: &str) -> String {
-        let menu = hotkeys::for_action(&self.hotkeys, hotkeys::Action::Main);
-        let settings = hotkeys::for_action(&self.hotkeys, hotkeys::Action::Config);
-        let menu = if menu.is_empty() {
-            "Alt+J Library".into()
-        } else {
-            format!("{menu} Menu")
-        };
-        let settings = if settings.is_empty() {
-            "Alt+K"
-        } else {
-            settings
-        };
-        format!("{title} | {menu} | {settings} Settings")
-    }
-
     fn save(&self) {
         let _ = settings::save(
             &serde_json::json!({
                 "textured":self.textured, "assist":self.assist, "fast_place": self.fast_place,
                 "correct_aim": self.correct_aim,
+                "fullscreen_ui": self.fullscreen_ui, "air_place": self.air_place,
                 "opacity": self.opacity, "hotkeys": self.hotkeys,
             })
             .to_string(),
@@ -108,6 +98,8 @@ impl Guest for Schematica {
                 options.correct_aim = value["correct_aim"]
                     .as_bool()
                     .unwrap_or(options.correct_aim);
+                options.fullscreen_ui = value["fullscreen_ui"].as_bool().unwrap_or(true);
+                options.air_place = value["air_place"].as_bool().unwrap_or(false);
                 if let Some(opacity) = value["opacity"].as_u64() {
                     options.opacity = opacity.clamp(25, 90) as u8;
                 }
@@ -382,6 +374,7 @@ impl Viewer {
             label("Schematica | Grant controls access in Settings > Mods.");
             return;
         };
+        native_bindings::sample();
         if !keys.focused {
             self.menu_armed = false;
             return;
@@ -486,6 +479,7 @@ impl Viewer {
         } else {
             None
         };
+        air_place::click(self, &keys, placement_cell);
         if let Some(placement) = self.placement
             && let Some(pos @ [x, y, z]) = placement_cell
             && let Some(block) = self.planned_block(pos)
@@ -550,7 +544,7 @@ impl Viewer {
             return None;
         }
         use hotkeys::Action;
-        match hotkeys::pressed(&self.options.hotkeys, keys, &mut self.menu_armed)? {
+        match native_bindings::action(keys, &mut self.menu_armed)? {
             Action::Main => return Some(Screen::Main),
             Action::Config => return Some(Screen::Settings),
             Action::Placement | Action::PlacementConfig => return Some(Screen::Control),
@@ -752,7 +746,11 @@ impl Viewer {
                 return;
             }
             "hotkeys" => {
-                self.screen = Screen::Hotkeys;
+                let _ = panel::open_settings("keyboard_and_mouse_forced_index");
+                return;
+            }
+            "import" => {
+                let _ = panel::open_settings("cinnabar_mods_index");
                 return;
             }
             "reset-hotkeys" => {
@@ -830,6 +828,24 @@ impl Viewer {
             "correct-aim" => {
                 self.options.correct_aim = !self.options.correct_aim;
                 self.options.save();
+                return;
+            }
+            "ui-layout" => {
+                self.options.fullscreen_ui = !self.options.fullscreen_ui;
+                self.options.save();
+                menu::open(self, true);
+                return;
+            }
+            "air-place" => {
+                self.options.air_place = !self.options.air_place;
+                self.options.save();
+                if self.options.air_place
+                    && !cinnabar::extension::permissions::read()
+                        .iter()
+                        .any(|permission| permission.name == "commands" && permission.granted)
+                {
+                    let _ = panel::open_settings("cinnabar_mods_index");
+                }
                 return;
             }
             "unload" => {
@@ -968,116 +984,7 @@ impl Viewer {
         self.clear_retired();
         self.retired.is_empty()
     }
-
-    fn show_label(&mut self, message: &str) {
-        if self.render_all && message != self.last_label {
-            label(message);
-            self.last_label = message.to_owned();
-        }
-    }
-
-    fn mismatch_count(&self) -> usize {
-        self.tiles.iter().map(Tile::mismatch_count).sum()
-    }
-
-    fn mismatches(&self) -> impl Iterator<Item = &([i32; 3], schematica_core::CellStatus)> {
-        self.tiles.iter().flat_map(|tile| &tile.mismatches)
-    }
-
-    fn clear_verifier_marker(&mut self) {
-        if let Some(marker) = self.verifier_marker.take() {
-            marker.remove();
-        }
-    }
-
-    fn publish_label(&mut self, placement_cell: Option<[i32; 3]>) {
-        if let Some(pos) = placement_cell
-            && let Some(block) = self.planned_block(pos)
-            && self.tiles.iter().any(|tile| tile.is_missing(pos))
-        {
-            let message = format!(
-                "Fast Place | {} at {pos:?} | Right-click to place",
-                block.name
-            );
-            self.show_label(&message);
-            return;
-        }
-        if self.options.assist
-            && let Some((block, pos)) = self.aimed_block()
-        {
-            let message = format!("Target | {} at {pos:?}", block.name);
-            self.show_label(&message);
-            return;
-        }
-        let pending = self
-            .tiles
-            .iter()
-            .filter(|tile| tile.stamp.is_none())
-            .count();
-        let message = if let Some(p) = self.placement {
-            let needed: u64 = self.tiles.iter().map(|t| t.tally.missing).sum();
-            let wrong: u64 = self.tiles.iter().map(|t| t.tally.wrong).sum();
-            let extra: u64 = self.tiles.iter().map(|t| t.tally.extra).sum();
-            let unknown: u64 = self.tiles.iter().map(|t| t.tally.unloaded).sum();
-            let layer = self.layers_text();
-            let note = if !self.shown {
-                "hidden".into()
-            } else if let Some(error) = self.tiles.iter().find_map(|t| t.error.as_ref()) {
-                error.clone()
-            } else {
-                format!("{pending} tiles pending")
-            };
-            format!(
-                "{} {:?} | {} | missing {} wrong {} extra {} unknown {} | {}",
-                self.schematic.name, p.origin, layer, needed, wrong, extra, unknown, note
-            )
-        } else {
-            self.options.menu_hint(&self.schematic.name)
-        };
-        self.show_label(&message);
-    }
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn menu_edits_turn_the_guide_and_select_layer_ranges() {
-        let mut viewer = Viewer::new(
-            Schematic::new("fixture", [2, 4, 3]),
-            Vec::new(),
-            vec!["Demo".into(), "Wagon".into()],
-            Options {
-                textured: true,
-                assist: false,
-                fast_place: false,
-                correct_aim: false,
-                opacity: 65,
-                hotkeys: BTreeMap::new(),
-            },
-            true,
-        );
-        viewer.placement = Some(Placement::new([12, 64, -5]));
-        assert!(viewer.options.textured);
-        viewer.menu_action("select-1");
-        viewer.menu_action("select-8");
-        assert_eq!(viewer.selected, Some(1));
-
-        viewer.menu_action("ccw");
-        let placement = viewer.placement.unwrap();
-        assert_eq!(placement.quarter_turns, 3);
-        assert_eq!(placement.footprint(viewer.schematic.size()), [3, 4, 2]);
-        assert!(viewer.dirty);
-        viewer.menu_action("cw");
-        assert_eq!(viewer.placement.unwrap().quarter_turns, 0);
-
-        viewer.menu_action("mode");
-        viewer.menu_action("next-layer");
-        assert_eq!(viewer.layers(), LayerMode::Single(1));
-        viewer.menu_action("mode");
-        assert_eq!(viewer.layers(), LayerMode::Range { min: 0, max: 1 });
-        viewer.menu_action("mode");
-        assert_eq!(viewer.layers(), LayerMode::All);
-    }
-}
+mod tests;

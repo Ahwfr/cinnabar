@@ -65,6 +65,7 @@ impl TemporaryAim {
 #[derive(Clone, Copy, Debug)]
 enum Catalog {
     Opening(u32),
+    CarriedOpening(u8),
     Taking(i32),
     Moving(i32),
     Closing,
@@ -93,6 +94,9 @@ fn advance_catalog(player: &mut client_state::PlayerRuntime, pending: &mut Pendi
         return CatalogStep::Failed;
     }
     let next = match stage {
+        Catalog::CarriedOpening(source) if ledger.background_personal_ready() => ledger
+            .begin_hotbar_swap(InventoryTarget::Player(source), pending.slot)
+            .map(Catalog::Moving),
         Catalog::Opening(id) if ledger.background_personal_ready() => ledger
             .begin_creative_take(id, CreativeDestination::Cursor, None)
             .map(Catalog::Taking),
@@ -245,17 +249,15 @@ pub(super) fn try_start(
         (slot, key, None, None)
     } else if let Some((_, source, item)) = carried {
         let slot = empty.unwrap_or(selected);
-        let request = match player
+        if !player
             .inventory_commands()
-            .begin_windowless_hotbar_swap(InventoryTarget::Player(source), slot)
+            .request_background_personal_open(stream.local_player_runtime_id())
         {
-            Ok(request) => request,
-            Err(error) => {
-                bevy::log::info!(block = %offer.name, source, slot, %error, "Fast Place inventory transfer was refused locally");
-                return false;
-            }
-        };
-        (slot, item, Some(request), None)
+            bevy::log::info!(block = %offer.name, source, slot,
+                "Fast Place could not open inventory for the carried block");
+            return false;
+        }
+        (slot, item, None, Some(Catalog::CarriedOpening(source)))
     } else {
         if game_mode != PlayerGameMode::Creative {
             bevy::log::info!(block = %offer.name, "Fast Place needs this block in the player's inventory");

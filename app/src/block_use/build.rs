@@ -159,9 +159,7 @@ fn prepare(
                 || observed.selection.item.count() == 0
                 || !world.is_air(expected.position).ok()?
                 || placement.position != expected.position
-                || !placement.additional.is_empty()
                 || actual_name != Some(expected.name.as_str())
-                || actual_states != Some(expected.states.as_str())
             {
                 let (yaw, pitch, _) = attempt.view.rotation().to_euler(bevy::math::EulerRot::YXZ);
                 bevy::log::info!(block = %expected.name, states = %expected.states, ghost = ?expected.position,

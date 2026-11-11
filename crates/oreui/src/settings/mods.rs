@@ -93,6 +93,15 @@ fn draw_sections(
         },
     )?;
     content.y += content.canvas.r(1.2);
+    actions(
+        content,
+        &[(
+            "Import schematics…",
+            Variant::Secondary,
+            (!library.busy).then_some(command(Action::ImportSchematics)),
+        )],
+    )?;
+    content.y += content.canvas.r(1.2);
     marketplace::draw(content)?;
     if !library.message.is_empty() {
         note(content, &library.message, theme::NEUTRAL80.fill)?;

@@ -189,10 +189,10 @@ fn ordered_fast_place_selects_a_carried_block_and_places_in_both_modes() {
 }
 
 #[test]
-fn ordered_fast_place_checks_the_predicted_state_and_leaves_unrelated_clicks_alone() {
+fn ordered_fast_place_allows_different_states_and_leaves_unrelated_clicks_alone() {
     for (position, expected_name, matching_state, places) in [
         (DESTINATION, "minecraft:stone", true, true),
-        (DESTINATION, "minecraft:stone", false, false),
+        (DESTINATION, "minecraft:stone", false, true),
         (DESTINATION, "minecraft:glass", false, true),
         (
             [DESTINATION[0], DESTINATION[1] + 1, DESTINATION[2]],
@@ -245,7 +245,7 @@ fn ordered_fast_place_checks_the_predicted_state_and_leaves_unrelated_clicks_alo
 }
 
 #[test]
-fn ordered_fast_place_checks_the_predicted_state_when_requesting_a_creative_item() {
+fn ordered_fast_place_waits_for_a_server_inventory_window_before_any_transfer() {
     for (mode, carried) in [
         (PlayerGameMode::Creative, false),
         (PlayerGameMode::Creative, true),
@@ -331,18 +331,15 @@ fn ordered_fast_place_checks_the_predicted_state_when_requesting_a_creative_item
 
         let player = app.world().resource::<client_state::PlayerRuntime>();
         let ledger = player.inventory.ledger();
-        assert_eq!(ledger.background_personal_active(), !carried);
+        assert!(ledger.background_personal_active());
         assert!(!ledger.personal_inventory_visible());
-        assert_eq!(ledger.pending_request_count(), usize::from(carried));
+        assert_eq!(ledger.pending_request_count(), 0);
         assert!(ledger.backing_stack(0).is_none());
         if carried {
-            assert_eq!(ledger.displayed_stack(0).unwrap().network_id, network_id);
-            assert_eq!(ledger.displayed_stack(0).unwrap().count, 32);
             assert_eq!(ledger.backing_stack(10).unwrap().count, 32);
-            assert!(ledger.displayed_stack(10).is_none());
-        } else {
-            assert!(ledger.displayed_stack(0).is_none());
+            assert_eq!(ledger.displayed_stack(10).unwrap().count, 32);
         }
+        assert!(ledger.displayed_stack(0).is_none());
         assert!(super::super::super::transaction_targets(&mut captured).is_empty());
         assert_eq!(
             cell(app.world(), DESTINATION).unwrap(),

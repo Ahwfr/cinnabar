@@ -43,6 +43,18 @@ pub enum Action {
     /// Vanilla's "Open Notification": opens what the showing toast offers.
     InteractWithToast,
     PickItem,
+    SchematicMenu,
+    SchematicConfig,
+    SchematicPlacement,
+    SchematicVerifier,
+    SchematicMaterials,
+    SchematicRender,
+    SchematicGhosts,
+    SchematicNextMode,
+    SchematicPreviousMode,
+    SchematicPlacementConfig,
+    SchematicNextLayer,
+    SchematicPreviousLayer,
 }
 
 impl Action {
@@ -88,10 +100,22 @@ impl Action {
             Self::Freelook => "freelook",
             Self::InteractWithToast => "interact-with-toast",
             Self::PickItem => "pick-item",
+            Self::SchematicMenu => "schematic-menu",
+            Self::SchematicConfig => "schematic-config",
+            Self::SchematicPlacement => "schematic-placement",
+            Self::SchematicVerifier => "schematic-verifier",
+            Self::SchematicMaterials => "schematic-materials",
+            Self::SchematicRender => "schematic-render",
+            Self::SchematicGhosts => "schematic-ghosts",
+            Self::SchematicNextMode => "schematic-next-mode",
+            Self::SchematicPreviousMode => "schematic-previous-mode",
+            Self::SchematicPlacementConfig => "schematic-placement-config",
+            Self::SchematicNextLayer => "schematic-next-layer",
+            Self::SchematicPreviousLayer => "schematic-previous-layer",
         }
     }
 
-    pub const COUNT: usize = 39;
+    pub const COUNT: usize = 51;
 
     pub(crate) const ALL: [Self; Self::COUNT] = [
         Self::MoveForward,
@@ -133,6 +157,18 @@ impl Action {
         Self::Freelook,
         Self::InteractWithToast,
         Self::PickItem,
+        Self::SchematicMenu,
+        Self::SchematicConfig,
+        Self::SchematicPlacement,
+        Self::SchematicVerifier,
+        Self::SchematicMaterials,
+        Self::SchematicRender,
+        Self::SchematicGhosts,
+        Self::SchematicNextMode,
+        Self::SchematicPreviousMode,
+        Self::SchematicPlacementConfig,
+        Self::SchematicNextLayer,
+        Self::SchematicPreviousLayer,
     ];
 
     pub(crate) const fn is_ui_preview(self) -> bool {

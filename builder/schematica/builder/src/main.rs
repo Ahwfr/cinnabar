@@ -1,4 +1,7 @@
+#![cfg_attr(windows, windows_subsystem = "windows")]
+
 mod import;
+mod launch;
 #[cfg(windows)]
 mod picker;
 
@@ -13,11 +16,44 @@ use std::{
 use wasm_encoder::{ComponentNameSection, CustomSection, Encode};
 
 fn main() -> Result<()> {
+    let result = run();
+    #[cfg(windows)]
+    if let Err(error) = &result
+        && env::args_os().len() == 1
+    {
+        picker::show_error(&format!("{error:#}"));
+    }
+    result
+}
+
+fn run() -> Result<()> {
     let args: Vec<_> = env::args_os().skip(1).collect();
     match args.as_slice() {
         #[cfg(windows)]
         [] => {
-            picker::run();
+            let root = env::current_exe()?
+                .parent()
+                .context("launcher folder")?
+                .to_path_buf();
+            if root.join("runtime/cinnabar.exe").is_file()
+                || env::current_exe()?.file_stem() == Some(std::ffi::OsStr::new("Cinnabar Builder"))
+            {
+                launch::start(&root)?;
+            } else {
+                picker::run();
+            }
+            Ok(())
+        }
+        #[cfg(windows)]
+        [cmd, mods] if cmd == "import-dialog" => launch::import_dialog(Path::new(mods)),
+        [cmd, input, output] if cmd == "refresh-component" => {
+            let bytes = launch::refresh(&fs::read(input)?)?;
+            fs::write(output, bytes)?;
+            Ok(())
+        }
+        [cmd, output] if cmd == "empty-library" => {
+            let template = launch::template()?;
+            fs::write(output, component(&template)?)?;
             Ok(())
         }
         [cmd, input] if cmd == "convert" => {
@@ -208,6 +244,15 @@ fn component(core: &[u8]) -> Result<Vec<u8>> {
     names.component(&name);
     component.push(0);
     names.encode(&mut component);
+    if let Some(revision) = guest_revision(core)? {
+        let version = format!("0.2.0+{}", &revision[..7]);
+        component.push(0);
+        CustomSection {
+            name: Cow::Borrowed("version"),
+            data: Cow::Borrowed(version.as_bytes()),
+        }
+        .encode(&mut component);
+    }
     Ok(component)
 }
 

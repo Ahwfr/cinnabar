@@ -72,6 +72,10 @@ impl ModHost {
     pub fn take_interaction(&mut self) -> InteractionOutput {
         self.instance.take_interaction()
     }
+    /// Consumes an explicit, successfully committed settings navigation request.
+    pub fn take_client_settings(&mut self) -> Option<String> {
+        self.instance.take_client_settings()
+    }
 }
 
 pub(super) struct ControlState {
@@ -527,6 +531,25 @@ impl State {
 }
 
 impl cinnabar::extension::panel::Host for State {
+    fn open_settings(&mut self, section: String) -> Result<Result<(), String>> {
+        self.controls.budget(false)?;
+        if !self.grants.controls || !self.controls.open {
+            return Ok(Err(
+                "settings navigation requires an open authorized panel".into()
+            ));
+        }
+        if section.is_empty()
+            || section.len() > 64
+            || !section
+                .bytes()
+                .all(|ch| ch.is_ascii_lowercase() || ch == b'_')
+        {
+            return Ok(Err("invalid client settings category".into()));
+        }
+        self.controls.pending_interaction.client_settings = Some(section);
+        self.controls.pending_open = Some(false);
+        Ok(Ok(()))
+    }
     fn open(&mut self) -> Result<Result<(), String>> {
         self.request_panel_open(true)
     }

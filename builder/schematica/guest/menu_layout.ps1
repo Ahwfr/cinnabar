@@ -1,13 +1,13 @@
 # Regenerates the JSON-UI panels checked into guest/ui. Run with PowerShell 7.
 param([string[]]$Screens = @('main','load','control','materials','settings','verifier','hotkeys'))
 $ErrorActionPreference = 'Stop'
-$ink = @(0.90,0.94,0.96,1)
-$muted = @(0.59,0.68,0.74,1)
-$accent = @(0.38,0.88,0.82,1)
-$surface = @(0.085,0.12,0.15,0.98)
-$buttonFill = @(0.14,0.20,0.24,1)
-$activeFill = @(0.10,0.30,0.31,1)
-$border = @(0.24,0.33,0.38,1)
+$ink = @(0.96,0.96,0.96,1)
+$muted = @(0.75,0.75,0.75,1)
+$accent = @(0.50,0.79,0.24,1)
+$surface = @(0.16,0.16,0.17,1)
+$buttonFill = @(0.30,0.30,0.31,1)
+$activeFill = @(0.23,0.43,0.10,1)
+$border = @(0.06,0.06,0.07,1)
 $origin = @{anchor_from='top_left';anchor_to='top_left'}
 
 function New-Rect($x,$y,$w,$h,$color,$radius=0) {
@@ -15,7 +15,7 @@ function New-Rect($x,$y,$w,$h,$color,$radius=0) {
 }
 
 function New-Label($text,$x,$y,$w,$color=$ink,$align='left') {
-    $label = $origin + @{type='label';text=$text;size=@($w,12);offset=@($x,$y);color=$color;text_alignment=$align;shadow=$true}
+    $label = $origin + @{type='label';text=$text;size=@($w,12);offset=@($x,$y);color=$color;text_alignment=$align;shadow=$false;font_type='mod_panel_sans'}
     if($text.StartsWith('#')) { $label.bindings=@(@{binding_name=$text}) }
     return $label
 }
@@ -27,14 +27,19 @@ function Add-Node($node) {
 function Add-Button($id,$text,$x,$y,$w,$h=20,$fill=$buttonFill,$field=$false,$colorBinding='',$visibleBinding='') {
     $index=$controls.Count
     $type=if($id){'button'}else{'panel'}
-    $line=New-Rect 1 1 ($w-2) ($h-2) $fill 3
+    $line=New-Rect 1 1 ($w-2) ($h-3) $fill
     if($colorBinding){ $line.bindings=@(@{binding_name=$colorBinding;binding_name_override='#color'}) }
     $node=$origin + @{type=$type;size=@($w,$h);offset=@($x,$y);controls=@(
-        @{border=(New-Rect 0 0 $w $h $border 4)},
+        @{border=(New-Rect 0 0 $w $h $border)},
         @{fill=$line},
+        @{hover=((New-Rect 1 1 ($w-2) ($h-3) @(0.40,0.40,0.41,1)) + @{visible=$false})},
+        @{pressed=((New-Rect 1 2 ($w-2) ($h-3) @(0.22,0.22,0.23,1)) + @{visible=$false})},
         @{caption=(New-Label $text 0 ([int][Math]::Floor(($h-10)/2)) $w $ink 'center')}
     )}
     if($id) {
+        $node.default_control='fill'
+        $node.hover_control='hover'
+        $node.pressed_control='pressed'
         $route='control'
         if($field){
             $controls.Add(@{kind='text';id=$id;label=$id;value='';max_chars=10})
@@ -53,9 +58,9 @@ function Add-Label($text,$x,$y,$w,$color=$ink,$align='left') {
 }
 
 function Add-Header($active) {
-    Add-Node (New-Rect 0 0 396 284 @(0.042,0.062,0.081,0.98) 8)
+    Add-Node (New-Rect 0 0 396 284 @(0.12,0.12,0.13,1))
     Add-Node (New-Rect 0 0 396 3 $accent)
-    Add-Button 'main' 'Schematica' 16 7 104 21 $activeFill
+    Add-Button 'main' '#build' 16 7 104 21 $activeFill
     Add-Label '#blueprint' 130 14 250 $ink 'right'
     $i=0
     $tabs = if ($active -ne 'main') {
@@ -85,11 +90,13 @@ foreach($screen in $Screens){
             Add-Button 'verifier' 'Schematic verifier' 204 136 176 26
             Add-Button 'settings' 'Configuration' 16 171 176 26
             Add-Button 'hotkeys' 'Hotkeys' 204 171 176 26
-            Add-Label 'Open Hotkeys to review or change bindings.' 16 220 364 $muted
+            Add-Button 'import' 'Import schematics…' 16 207 176 26 $activeFill
+            Add-Label 'Keybinds are in Keyboard & Mouse.' 204 216 176 $muted
             Add-Button 'close' 'Done' 296 252 84 22 $activeFill
         }
         'load' {
-            Add-Label 'SELECT BLUEPRINT' 16 76 364 $muted
+            Add-Label 'SELECT BLUEPRINT' 16 76 220 $muted
+            Add-Button 'import' 'Import…' 296 72 84 19 $activeFill
             for($i=0;$i -lt 8;$i++){
                 Add-Button "select-$i" "#file$i" 16 (93+18*$i) 364 17 $buttonFill $false "#rowColor$i" "#visible$i"
             }
@@ -146,24 +153,21 @@ foreach($screen in $Screens){
             Add-Button 'close' 'Done' 296 252 84 22 $activeFill
         }
         'settings' {
-            Add-Node (New-Rect 16 80 364 35 $surface 5)
-            Add-Label 'Block preview' 27 84 175
-            Add-Label 'Native block textures.' 27 100 175 $muted
-            Add-Button 'look' '#look' 208 86 76 24
-            Add-Button 'opacity' '#opacity' 290 86 77 24
-            Add-Node (New-Rect 16 119 364 35 $surface 5)
-            Add-Label 'Target info' 27 123 200
-            Add-Label 'Shows the planned block and position.' 27 139 210 $muted
-            Add-Button 'assist' '#assist' 246 125 121 24
-            Add-Node (New-Rect 16 158 364 35 $surface 5)
-            Add-Label 'Fast Place' 27 162 200
-            Add-Label 'Uses inventory or Creative catalog.' 27 178 210 $muted
-            Add-Button 'fast-place' '#fast-place' 246 164 121 24
-            Add-Node (New-Rect 16 197 364 35 $surface 5)
-            Add-Label 'Auto orientation' 27 201 200
-            Add-Label 'Server aim only. Camera stays still.' 27 217 210 $muted
-            Add-Button 'correct-aim' '#correct-aim' 246 203 121 24
-            Add-Button 'hotkeys' 'Hotkeys' 16 252 84 22
+            Add-Label 'Block preview' 24 85 175
+            Add-Button 'look' '#look' 208 78 76 24
+            Add-Button 'opacity' '#opacity' 290 78 77 24
+            Add-Label 'Target info' 24 113 200
+            Add-Button 'assist' '#assist' 246 106 121 24
+            Add-Label 'Fast Place' 24 141 200
+            Add-Button 'fast-place' '#fast-place' 246 134 121 24
+            Add-Label 'Auto orientation (server aim)' 24 169 215
+            Add-Button 'correct-aim' '#correct-aim' 246 162 121 24
+            Add-Label 'Air placement (setblock cheats)' 24 197 215
+            Add-Button 'air-place' '#air-place' 246 190 121 24
+            Add-Label 'Menu layout' 24 225 200
+            Add-Button 'ui-layout' '#ui-layout' 246 218 121 24
+            Add-Button 'hotkeys' 'Keybinds' 16 252 84 22
+            Add-Label 'Air commands use no items.' 108 258 180 $muted
             Add-Button 'close' 'Done' 296 252 84 22 $activeFill
         }
         'verifier' {

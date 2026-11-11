@@ -67,6 +67,7 @@ jobs:
             builder-windows-incremental-v1-${{ hashFiles('rust-toolchain.toml', '.github/workflows/builder-windows.yml') }}-
             builder-windows-incremental-v1-72e7ad6ea8c0e3ca8b38b1d2f7d16f4edf5319251f539f4aa444f60f6a6bd223-
             builder-windows-incremental-v1-779b123bffca1cfcf7c502ee408aa5315bd12b973206256d5e6aff1888318395-
+            builder-windows-incremental-v1-
       - name: Seed the first incremental build from the previous dependency cache
         if: steps.rust-cache.outputs.cache-hit == ''
         uses: actions/cache/restore@v5
@@ -108,22 +109,24 @@ jobs:
         if: env.HEADLESS_TEST != 'true'
         shell: pwsh
         run: |
-          $release = 'builder-artifact/target/release'
-          $importer = 'builder-artifact/target/builder-importer'
-          $wasm = 'wasm32-unknown-unknown/release'
-          New-Item -ItemType Directory -Force -Path $release, "$importer/release", "$importer/$wasm" | Out-Null
+          $release = 'builder-artifact/runtime'
+          New-Item -ItemType Directory -Force -Path $release | Out-Null
           foreach ($line in Get-Content -LiteralPath 'packaging/common/runtime-binaries.txt') {
             $name = ($line -split '\s+')[0]
             Copy-Item -LiteralPath "target/release/$name.exe" -Destination $release
           }
           Copy-Item -LiteralPath 'target/release/assetc.exe' -Destination $release
           ./packaging/windows/fetch-dxc.ps1 -Out $release
-          Copy-Item -LiteralPath 'target/builder-importer/release/schematica-builder.exe' -Destination "$importer/release"
-          Copy-Item -LiteralPath "target/builder-importer/$wasm/schematica_guest.wasm" -Destination "$importer/$wasm"
+          Copy-Item -LiteralPath 'target/builder-importer/release/schematica-builder.exe' -Destination 'builder-artifact/Cinnabar Builder.exe'
+          Copy-Item -LiteralPath 'target/builder-importer/wasm32-unknown-unknown/release/schematica_guest.wasm' -Destination 'builder-artifact/schematica-guest-template.bin'
+          ./packaging/windows/stage-prep-kit.ps1 -Root $PWD -Kit "$release/resources/prep-kit" -Assetc "$release/assetc.exe"
           Copy-Item -LiteralPath 'LICENSE', 'THIRD_PARTY_NOTICES.md' -Destination 'builder-artifact'
           Copy-Item -LiteralPath 'builder/schematica/SCHEMATICA-LICENSE.txt' -Destination 'builder-artifact'
           Copy-Item -LiteralPath 'assets/licenses' -Destination 'builder-artifact' -Recurse
-          Set-Content -LiteralPath "$release/builder-commit.txt" -Value $env:GITHUB_SHA -Encoding ASCII
+          Set-Content -LiteralPath 'builder-artifact/builder-commit.txt' -Value $env:GITHUB_SHA -Encoding ASCII
+          Copy-Item -LiteralPath 'builder/PORTABLE-README.md' -Destination 'builder-artifact/README.md'
+          git archive --format=zip --output=builder-artifact/Builder-Source.zip HEAD
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
       - uses: actions/upload-artifact@v7
         if: env.HEADLESS_TEST != 'true'
         with:

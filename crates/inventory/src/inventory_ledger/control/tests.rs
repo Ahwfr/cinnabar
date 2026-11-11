@@ -47,6 +47,36 @@ fn a_cancelled_background_open_closes_when_the_server_answers() {
 }
 
 #[test]
+fn a_background_window_can_move_a_carried_stack_without_showing_inventory() {
+    use crate::inventory_ledger::InventoryTarget;
+    use protocol::{InventorySlotEvent, NetworkItemStack, SlotIdentity};
+    let mut ledger = ledger_with_slot_zero();
+    let stack = ledger.backing_stack(0).unwrap().clone();
+    for (slot, stack) in [(0, NetworkItemStack::empty()), (10, stack)] {
+        ledger.apply(&InventoryEvent::Slot(InventorySlotEvent {
+            identity: SlotIdentity {
+                container: ContainerIdentity::window(0),
+                slot,
+            },
+            stack,
+            storage_item: None,
+        }));
+    }
+    assert!(ledger.request_background_personal_open(42));
+    assert!(!ledger.background_personal_ready());
+    assert!(ledger.mark_transport_enqueued(0));
+    ledger.apply(&InventoryEvent::Open(personal_open(7)));
+    assert!(ledger.background_personal_ready());
+    assert!(!ledger.personal_inventory_visible());
+    ledger
+        .begin_hotbar_swap(InventoryTarget::Player(10), 2)
+        .unwrap();
+    assert_eq!(ledger.displayed_stack(2).unwrap().count, 32);
+    assert!(ledger.displayed_stack(10).is_none());
+    assert_eq!(ledger.backing_stack(10).unwrap().count, 32);
+}
+
+#[test]
 fn mounted_reply_finishes_the_request_without_a_personal_reset_close() {
     let mut ledger = ledger_with_slot_zero();
     assert!(ledger.request_personal_open(900));

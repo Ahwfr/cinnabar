@@ -1,1 +1,1 @@
-{"terrain":true,"controls":true,"world_draw":true,"render_material":true,"settings":true,"inventory":true,"item_use":true}
+{"terrain":true,"controls":true,"world_draw":true,"render_material":true,"settings":true,"inventory":true,"item_use":true,"commands":["setblock"],"hud":true}

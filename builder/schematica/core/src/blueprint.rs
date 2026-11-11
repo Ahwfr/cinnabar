@@ -37,6 +37,9 @@ pub fn encode_library(blueprints: &[Vec<u8>]) -> Result<Vec<u8>, String> {
 }
 
 pub fn library(mut bytes: &[u8]) -> Result<Vec<&[u8]>, String> {
+    if bytes.is_empty() {
+        return Ok(Vec::new());
+    }
     if bytes.starts_with(b"SCB1") {
         return Ok(vec![bytes]);
     }

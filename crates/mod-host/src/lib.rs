@@ -125,6 +125,8 @@ pub struct CreativePlacementOffer {
 /// Successfully committed local interaction requests, consumed once per frame.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct InteractionOutput {
+    /// A client settings category explicitly requested from an open mod panel.
+    pub client_settings: Option<String>,
     pub block_breaks: Vec<GameplayBlockPosition>,
     pub attack_reach: Option<f32>,
     pub attack_pulse: bool,

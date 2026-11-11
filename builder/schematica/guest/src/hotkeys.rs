@@ -41,11 +41,6 @@ pub fn binding(overrides: &BTreeMap<usize, String>, index: usize) -> &str {
         .map_or(BINDINGS[index].2, String::as_str)
 }
 
-pub fn for_action(overrides: &BTreeMap<usize, String>, action: Action) -> &str {
-    let index = BINDINGS.iter().position(|entry| entry.0 == action).unwrap();
-    binding(overrides, index)
-}
-
 pub fn edit(overrides: &mut BTreeMap<usize, String>, index: usize, value: &str) {
     let value = value.trim().to_ascii_uppercase();
     if index >= BINDINGS.len() || (!value.is_empty() && chord(&value).is_none()) {
@@ -109,6 +104,7 @@ fn chord(value: &str) -> Option<(Option<&str>, &str)> {
 }
 
 /// Delay a standalone main-menu key until release so its chords can act first.
+#[cfg(test)]
 pub fn pressed(
     overrides: &BTreeMap<usize, String>,
     keys: &input::Controls,

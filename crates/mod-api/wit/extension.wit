@@ -367,6 +367,8 @@ interface player-state {
 /// An opt-in retained settings panel, rendered and hit-tested by the host.
 /// Grants: `controls`.
 interface panel {
+    /// Opens a native client settings category from this instance's open authorized panel.
+    open-settings: func(section: string) -> result<_, string>;
     /// One numeric control event routed to its owning mod by control ID.
     record event { id: string, value: f32 }
     /// Opens this instance's panel on successful callback return. Requires controls

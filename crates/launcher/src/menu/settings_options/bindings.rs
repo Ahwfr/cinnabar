@@ -112,6 +112,30 @@ bindings! {
         None, true, None;
     PlayerList => "key.playerList", Some(Action::PlayerList), Some(DeviceRow::Action(21)), None,
         None, false, Some("Player List");
+    SchematicMenu => "key.schematic-menu", Some(Action::SchematicMenu), Some(DeviceRow::Action(22)), None,
+        None, false, Some("Schematica Menu");
+    SchematicConfig => "key.schematic-config", Some(Action::SchematicConfig), Some(DeviceRow::Action(23)), None,
+        None, false, Some("Schematica Settings");
+    SchematicPlacement => "key.schematic-placement", Some(Action::SchematicPlacement), Some(DeviceRow::Action(24)), None,
+        None, false, Some("Schematica Placement");
+    SchematicVerifier => "key.schematic-verifier", Some(Action::SchematicVerifier), Some(DeviceRow::Action(25)), None,
+        None, false, Some("Schematica Verifier");
+    SchematicMaterials => "key.schematic-materials", Some(Action::SchematicMaterials), Some(DeviceRow::Action(26)), None,
+        None, false, Some("Schematica Materials");
+    SchematicRender => "key.schematic-render", Some(Action::SchematicRender), Some(DeviceRow::Action(27)), None,
+        None, false, Some("Schematica Rendering");
+    SchematicGhosts => "key.schematic-ghosts", Some(Action::SchematicGhosts), Some(DeviceRow::Action(28)), None,
+        None, false, Some("Schematica Ghost Blocks");
+    SchematicNextMode => "key.schematic-next-mode", Some(Action::SchematicNextMode), Some(DeviceRow::Action(29)), None,
+        None, false, Some("Schematica Next Layer Mode");
+    SchematicPreviousMode => "key.schematic-previous-mode", Some(Action::SchematicPreviousMode), Some(DeviceRow::Action(30)), None,
+        None, false, Some("Schematica Previous Layer Mode");
+    SchematicPlacementConfig => "key.schematic-placement-config", Some(Action::SchematicPlacementConfig), Some(DeviceRow::Action(31)), None,
+        None, false, Some("Schematica Placement Settings");
+    SchematicNextLayer => "key.schematic-next-layer", Some(Action::SchematicNextLayer), Some(DeviceRow::Action(32)), None,
+        None, false, Some("Schematica Next Layer");
+    SchematicPreviousLayer => "key.schematic-previous-layer", Some(Action::SchematicPreviousLayer), Some(DeviceRow::Action(33)), None,
+        None, false, Some("Schematica Previous Layer");
     Inventory => "key.inventory", None, Some(DeviceRow::Extra(0, Some(PhysicalControl::KeyboardUsage(0x08)))), Some(DeviceRow::Extra(0, Some(PhysicalControl::GamepadButton(2)))),
         None, false, None;
     Chat => "key.chat", None, Some(DeviceRow::Extra(1, Some(PhysicalControl::KeyboardUsage(0x17)))), Some(DeviceRow::Extra(1, Some(PhysicalControl::GamepadButton(14)))),

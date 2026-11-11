@@ -45,6 +45,7 @@ pub enum Action {
     Disable(u64),
     Remove(u64),
     Import,
+    ImportSchematics,
     ViewUpdates,
     OpenUpdate(u64),
     Update(u64),

@@ -32,7 +32,8 @@ pub fn open(viewer: &Viewer, replace: bool) {
         Screen::Verifier => VERIFIER,
         Screen::Hotkeys => HOTKEYS,
     };
-    let result = panel::set_content(template).and_then(|()| update(viewer));
+    let content = content(template, viewer.options.fullscreen_ui);
+    let result = panel::set_content(&content).and_then(|()| update(viewer));
     let result = if replace {
         result
     } else {
@@ -40,6 +41,43 @@ pub fn open(viewer: &Viewer, replace: bool) {
     };
     if let Err(e) = result {
         label(&format!("Schematica panel: {e}"));
+    }
+}
+
+/// Uses the same hit-tested controls for a compact window or a viewport-filling layout.
+fn content(template: &str, fullscreen: bool) -> String {
+    if !fullscreen {
+        return template.to_owned();
+    }
+    let mut panel: Value = serde_json::from_str(template).unwrap();
+    let mut document: Value =
+        serde_json::from_str(panel["surface"]["document"].as_str().unwrap()).unwrap();
+    let card = &mut document["menu"]["controls"][0]["card"];
+    stretch(card, [396.0, 284.0]);
+    card["size"] = json!(["100%", "100%"]);
+    panel["surface"]["document"] = json!(document.to_string());
+    panel.to_string()
+}
+
+fn stretch(node: &mut Value, parent: [f64; 2]) {
+    let own = [0, 1].map(|axis| node["size"][axis].as_f64().unwrap_or(parent[axis]));
+    for field in ["size", "offset"] {
+        if let Some(values) = node.get_mut(field).and_then(Value::as_array_mut) {
+            for (axis, value) in values.iter_mut().enumerate().take(2) {
+                if let Some(number) = value.as_f64() {
+                    *value = json!(format!("{}%", number * 100.0 / parent[axis]));
+                }
+            }
+        }
+    }
+    if let Some(controls) = node.get_mut("controls").and_then(Value::as_array_mut) {
+        for child in controls {
+            if let Some(children) = child.as_object_mut() {
+                for child in children.values_mut() {
+                    stretch(child, own);
+                }
+            }
+        }
     }
 }
 
@@ -57,6 +95,11 @@ fn update(viewer: &Viewer) -> Result<(), String> {
         "No blueprint loaded".into()
     };
     out.insert("#blueprint".into(), json!(blueprint));
+    let revision = option_env!("SCHEMATICA_BUILD_REVISION").unwrap_or("local");
+    out.insert(
+        "#build".into(),
+        json!(format!("Builder {}", &revision[..revision.len().min(7)])),
+    );
     let mut controls = Vec::new();
     match viewer.screen {
         Screen::Main => {}
@@ -129,8 +172,24 @@ fn update(viewer: &Viewer) -> Result<(), String> {
         }
         Screen::Settings => {
             out.insert(
+                "#ui-layout".into(),
+                json!(if viewer.options.fullscreen_ui {
+                    "Full screen"
+                } else {
+                    "Compact"
+                }),
+            );
+            out.insert(
+                "#air-place".into(),
+                json!(if viewer.options.air_place {
+                    "On"
+                } else {
+                    "Off"
+                }),
+            );
+            out.insert(
                 "#opacity".into(),
-                json!(format!("{}%", viewer.options.opacity)),
+                json!(format!("Opacity {}", viewer.options.opacity)),
             );
             out.insert(
                 "#look".into(),
@@ -295,6 +354,40 @@ mod tests {
                 let id = control["id"].as_str().unwrap();
                 assert!(ids.insert(id), "duplicate panel control {id}");
             }
+        }
+    }
+
+    #[test]
+    fn fullscreen_layout_keeps_the_same_controls() {
+        let compact: Value = serde_json::from_str(SETTINGS).unwrap();
+        let full = content(SETTINGS, true);
+        let full_panel: Value = serde_json::from_str(&full).unwrap();
+        assert_eq!(compact["controls"], full_panel["controls"]);
+        let document: Value =
+            serde_json::from_str(full_panel["surface"]["document"].as_str().unwrap()).unwrap();
+        fn static_children(value: &Value) {
+            match value {
+                Value::Object(object) => {
+                    assert!(object.get("controls").is_none_or(Value::is_array));
+                    for value in object.values() {
+                        static_children(value);
+                    }
+                }
+                Value::Array(array) => {
+                    for value in array {
+                        static_children(value);
+                    }
+                }
+                _ => {}
+            }
+        }
+        static_children(&document);
+        assert_eq!(
+            document["menu"]["controls"][0]["card"]["size"],
+            json!(["100%", "100%"])
+        );
+        if let Some(path) = std::env::var_os("SCHEMATICA_PANEL_REVIEW") {
+            std::fs::write(path, full).unwrap();
         }
     }
 }
