@@ -132,7 +132,9 @@ mod tests {
     #[test]
     fn a_remapped_binding_uses_the_new_key_and_can_be_unbound() {
         CACHE.with(|cache| {
-            cache.borrow_mut().bindings = vec![input::ActionBinding {
+            let mut cache = cache.borrow_mut();
+            cache.revision = Some(1);
+            cache.bindings = vec![input::ActionBinding {
                 action: "schematic-menu".into(),
                 context: input::BindingContext::Gameplay,
                 key: "F4".into(),
